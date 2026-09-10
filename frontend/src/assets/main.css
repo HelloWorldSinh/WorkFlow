@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Light Theme Color Palette - Enterprise SaaS Clean Style */
+  --bg-app: #f8fafc;        /* Slate-50 background */
+  --bg-surface: #ffffff;    /* Pure White for Navbar, Drawers, Modals */
+  --bg-card: #ffffff;       /* Card surfaces */
+  --bg-card-hover: #f1f5f9; /* Slate-100 */
+  --bg-subtle: #f1f5f9;     /* Subtle container background */
+  --bg-glass: rgba(255, 255, 255, 0.85);
+
+  --border-color: #e2e8f0;   /* Slate-200 */
+  --border-subtle: #f1f5f9;  /* Slate-100 */
+  --border-focus: #0284c7;   /* Sky-600 */
+  --border-glow: rgba(2, 132, 199, 0.18);
+
+  --text-primary: #0f172a;   /* Slate-900 */
+  --text-secondary: #475569; /* Slate-600 */
+  --text-muted: #94a3b8;     /* Slate-400 */
+
+  /* Primary Accent - Ocean / Sky Blue (Matching EditorTopBar) */
+  --primary: #0284c7;
+  --primary-hover: #0369a1;
+  --primary-light: #e0f2fe;
+  --accent-gradient: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%);
+  --accent-gradient-subtle: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+
+  /* Status Colors (Optimized for Light Mode) */
+  --status-published: #059669;
+  --status-published-bg: #ecfdf5;
+  --status-published-border: #a7f3d0;
+
+  --status-draft: #d97706;
+  --status-draft-bg: #fffbeb;
+  --status-draft-border: #fde68a;
+
+  --status-suspended: #64748b;
+  --status-suspended-bg: #f8fafc;
+  --status-suspended-border: #cbd5e1;
+
+  --status-danger: #dc2626;
+  --status-danger-bg: #fef2f2;
+  --status-danger-border: #fecaca;
+
+  /* Shadows & Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 16px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+  --shadow-lg: 0 12px 30px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+  --shadow-glow: 0 0 24px rgba(2, 132, 199, 0.22);
+
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* Custom Scrollbar for Light Mode */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Inputs & Form Controls */
+input, select, textarea {
+  font-family: inherit;
+  font-size: 0.875rem;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 0.875rem;
+  transition: var(--transition);
+  outline: none;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--border-glow);
+  background: #ffffff;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Button Reset */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: var(--transition);
+}

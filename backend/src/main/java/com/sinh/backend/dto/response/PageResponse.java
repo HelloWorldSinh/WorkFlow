@@ -1,0 +1,33 @@
+package com.sinh.backend.dto.response;
+
+import lombok.*;
+import org.springframework.data.domain.Page;
+
+import java.util.List;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class PageResponse<T> {
+
+    private List<T> items;
+    private int pageNumber;
+    private int pageSize;
+    private long totalElements;
+    private int totalPages;
+    private boolean isFirst;
+    private boolean isLast;
+
+    public static <T> PageResponse<T> of(Page<T> page) {
+        return PageResponse.<T>builder()
+                .items(page.getContent())
+                .pageNumber(page.getNumber())
+                .pageSize(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .isFirst(page.isFirst())
+                .isLast(page.isLast())
+                .build();
+    }
+}
