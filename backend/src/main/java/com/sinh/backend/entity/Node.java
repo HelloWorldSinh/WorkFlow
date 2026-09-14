@@ -4,6 +4,9 @@ import com.sinh.backend.entity.enums.NodeType;
 import jakarta.persistence.*;
 import lombok.*;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "nodes")
 @Data
@@ -27,7 +30,8 @@ public class Node {
     @Column(name = "name", length = 255)
     private String name;
 
-    @Column(name = "config", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "config", columnDefinition = "jsonb")
     private String config;
 
     @ManyToOne(fetch = FetchType.LAZY)

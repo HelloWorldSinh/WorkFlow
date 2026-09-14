@@ -6,6 +6,9 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "form_fields")
 @Data
@@ -52,7 +55,8 @@ public class FormField {
     @Column(name = "max_val")
     private Integer maxVal;
 
-    @Column(name = "options", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "options", columnDefinition = "jsonb")
     private String options;
 
     @Column(name = "order_index")

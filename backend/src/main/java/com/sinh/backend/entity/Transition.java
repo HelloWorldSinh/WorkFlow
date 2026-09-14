@@ -3,6 +3,9 @@ package com.sinh.backend.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "transitions")
 @Data
@@ -30,6 +33,7 @@ public class Transition {
     @Column(name = "label")
     private String label;
 
-    @Column(name = "conditions", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "conditions", columnDefinition = "jsonb")
     private String conditions;
 }

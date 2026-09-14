@@ -6,6 +6,9 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "change_logs")
 @Data
@@ -29,7 +32,8 @@ public class ChangeLog {
     @Column(name = "action", length = 255)
     private String action;
 
-    @Column(name = "details", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "details", columnDefinition = "jsonb")
     private String details;
 
     @UpdateTimestamp
