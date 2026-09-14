@@ -339,10 +339,20 @@ public class WorkflowServiceImpl implements WorkflowService {
                 Node targetNode = createdNodeMap.get(edgeDTO.getToNodeId());
 
                 if (sourceNode != null && targetNode != null) {
-                    // 1. Tự động sinh chuỗi biểu thức logic từ các rules nếu chưa có
+                    // 1. Re-validate & parse expression to nested JSON tree with DataType inference
                     String expression = edgeDTO.getConditionExpression();
                     if ((expression == null || expression.trim().isEmpty()) && edgeDTO.getConditions() != null) {
                         expression = generateConditionExpression(edgeDTO.getConditions());
+                    }
+
+                    Map<String, Object> conditionTree = Collections.emptyMap();
+                    if (expression != null && !expression.trim().isEmpty()) {
+                        try {
+                            conditionTree = com.sinh.backend.util.ConditionExpressionParser.parseToTree(expression);
+                        } catch (IllegalArgumentException e) {
+                            log.error("Cú pháp biểu thức không hợp lệ cho edge {}: {}", edgeDTO.getId(), e.getMessage());
+                            throw e;
+                        }
                     }
 
                     // 2. Nhãn hiển thị: ưu tiên nhãn người dùng nhập, nếu để trống thì lấy biểu thức điều kiện
@@ -355,6 +365,8 @@ public class WorkflowServiceImpl implements WorkflowService {
                     Map<String, Object> conditionMap = new HashMap<>();
                     if (expression != null && !expression.trim().isEmpty()) {
                         conditionMap.put("expression", expression);
+                        conditionMap.put("tree", conditionTree);
+                        conditionMap.put("conditionTree", conditionTree);
                     }
                     if (edgeDTO.getMatchType() != null) {
                         conditionMap.put("matchType", edgeDTO.getMatchType());
