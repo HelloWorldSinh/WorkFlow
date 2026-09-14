@@ -241,13 +241,9 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
           endpointUrl: 'https://api.company.com/webhook',
         }
       case 'condition':
-        return {
-          defaultBranch: 'ELSE',
-        }
+        return {}
       case 'parallel':
-        return {
-          joinMode: 'all' as const,
-        }
+        return {}
       case 'join':
         return {
           joinStrategy: 'wait_all' as const,
@@ -359,6 +355,21 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
       }
     }
 
+    // Kiểm tra giới hạn nhánh Mặc định (ELSE / Fallback): Mỗi node chỉ được tối đa 1 nhánh ELSE
+    const isElse = branchType === 'else' || branchType === 'default' || label?.trim() === 'ELSE'
+    if (isElse) {
+      const hasElseEdge = edges.value.some(
+        (e) => e.fromNodeId === fromNodeId && (e.branchType === 'else' || e.branchType === 'default' || e.label?.trim() === 'ELSE')
+      )
+      if (hasElseEdge) {
+        showToast(
+          `Bước "${fromNode?.name || fromNodeId}" đã có 1 nhánh mặc định (ELSE / Fallback). Mỗi bước chỉ được phép có tối đa 1 nhánh Mặc định.`,
+          'error'
+        )
+        return
+      }
+    }
+
     const newEdge: WorkflowEditorEdge = {
       id: `edge-${Date.now().toString().slice(-4)}`,
       fromNodeId,
@@ -392,6 +403,32 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   function updateEdge(id: string, updates: Partial<WorkflowEditorEdge>) {
     const edge = edges.value.find((e) => e.id === id)
     if (edge) {
+      const nextFromNodeId = updates.fromNodeId ?? edge.fromNodeId
+      const nextBranchType = updates.branchType ?? edge.branchType
+      const nextLabel = updates.label ?? edge.label
+
+      const willBeElse =
+        nextBranchType === 'else' ||
+        nextBranchType === 'default' ||
+        nextLabel?.trim() === 'ELSE'
+
+      if (willBeElse) {
+        const hasOtherElse = edges.value.some(
+          (e) =>
+            e.id !== id &&
+            e.fromNodeId === nextFromNodeId &&
+            (e.branchType === 'else' || e.branchType === 'default' || e.label?.trim() === 'ELSE')
+        )
+        if (hasOtherElse) {
+          const fromNode = nodes.value.find((n) => n.id === nextFromNodeId)
+          showToast(
+            `Bước "${fromNode?.name || nextFromNodeId}" đã có 1 nhánh mặc định (ELSE / Fallback). Không thể tạo thêm nhánh mặc định thứ 2.`,
+            'error'
+          )
+          return
+        }
+      }
+
       Object.assign(edge, updates)
       isDirty.value = true
     }

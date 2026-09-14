@@ -333,21 +333,33 @@ public class WorkflowServiceImpl implements WorkflowService {
             }
         }
 
-        // 4. Kiểm tra nguyên tắc luồng: Tất cả các node (trừ CONDITION & PARALLEL) chỉ được có tối đa 1 luồng đầu ra
+        // 4. Kiểm tra nguyên tắc luồng:
+        // - Tất cả các node (trừ CONDITION & PARALLEL) chỉ được có tối đa 1 luồng đầu ra
+        // - Tất cả các node chỉ được phép có tối đa 1 nhánh mặc định (ELSE / Fallback)
         if (request.getEdges() != null && request.getNodes() != null) {
             Map<String, Long> outgoingCounts = request.getEdges().stream()
                     .filter(e -> e.getFromNodeId() != null)
                     .collect(Collectors.groupingBy(SaveWorkflowGraphRequest.EdgeDTO::getFromNodeId, Collectors.counting()));
 
+            Map<String, Long> elseOutgoingCounts = request.getEdges().stream()
+                    .filter(e -> e.getFromNodeId() != null)
+                    .filter(e -> "else".equalsIgnoreCase(e.getBranchType()) || "ELSE".equalsIgnoreCase(e.getLabel()))
+                    .collect(Collectors.groupingBy(SaveWorkflowGraphRequest.EdgeDTO::getFromNodeId, Collectors.counting()));
+
             for (SaveWorkflowGraphRequest.NodeDTO nodeDTO : request.getNodes()) {
                 NodeType type = parseNodeType(nodeDTO.getType());
-                String rawType = nodeDTO.getType() != null ? nodeDTO.getType().trim().toLowerCase() : "";
-                if (!"condition".equals(rawType) && !"parallel".equals(rawType) && type != NodeType.End) {
+                if (type != NodeType.Condition && type != NodeType.Parallel && type != NodeType.End) {
                     long count = outgoingCounts.getOrDefault(nodeDTO.getId(), 0L);
                     if (count > 1) {
                         throw new IllegalArgumentException("Bước '" + (nodeDTO.getName() != null ? nodeDTO.getName() : nodeDTO.getId())
                                 + "' chỉ được phép có 1 luồng đầu ra. Hãy dùng bước Rẽ Nhánh (Condition/Parallel) nếu muốn rẽ luồng.");
                     }
+                }
+
+                long elseCount = elseOutgoingCounts.getOrDefault(nodeDTO.getId(), 0L);
+                if (elseCount > 1) {
+                    throw new IllegalArgumentException("Bước '" + (nodeDTO.getName() != null ? nodeDTO.getName() : nodeDTO.getId())
+                            + "' chỉ được phép có tối đa 1 nhánh mặc định (ELSE / Fallback).");
                 }
             }
         }
@@ -381,29 +393,29 @@ public class WorkflowServiceImpl implements WorkflowService {
                         label = expression;
                     }
 
-                    // 3. Đóng gói payload JSON cấu hình điều kiện (tinh gọn, không lặp lại trường rác)
-                    Map<String, Object> conditionMap = new LinkedHashMap<>();
-                    if (expression != null && !expression.trim().isEmpty()) {
+                    // 3. Đóng gói payload JSON cấu hình điều kiện tinh gọn (không lặp lại các trường rác)
+                    String conditionJson = null;
+                    boolean isElse = "else".equalsIgnoreCase(edgeDTO.getBranchType());
+
+                    if (isElse) {
+                        Map<String, Object> conditionMap = new LinkedHashMap<>();
+                        conditionMap.put("isElse", true);
+                        conditionMap.put("priority", edgeDTO.getPriority() != null ? edgeDTO.getPriority() : 999);
+                        try {
+                            conditionJson = objectMapper.writeValueAsString(conditionMap);
+                        } catch (Exception e) {
+                            log.error("Lỗi serialize condition JSON edge {}: {}", edgeDTO.getId(), e.getMessage());
+                        }
+                    } else if (expression != null && !expression.trim().isEmpty()) {
+                        Map<String, Object> conditionMap = new LinkedHashMap<>();
                         conditionMap.put("expression", expression);
                         conditionMap.put("conditionTree", conditionTree);
-                    }
-                    if (edgeDTO.getPriority() != null) {
-                        conditionMap.put("priority", edgeDTO.getPriority());
-                    } else {
-                        conditionMap.put("priority", 1);
-                    }
-                    if (edgeDTO.getId() != null) {
-                        conditionMap.put("clientEdgeId", edgeDTO.getId());
-                    }
-                    if (edgeDTO.getBranchType() != null) {
-                        conditionMap.put("branchType", edgeDTO.getBranchType());
-                    }
-
-                    String conditionJson = null;
-                    try {
-                        conditionJson = objectMapper.writeValueAsString(conditionMap);
-                    } catch (Exception e) {
-                        log.error("Lỗi parse condition JSON edge {}: {}", edgeDTO.getId(), e.getMessage());
+                        conditionMap.put("priority", edgeDTO.getPriority() != null ? edgeDTO.getPriority() : 1);
+                        try {
+                            conditionJson = objectMapper.writeValueAsString(conditionMap);
+                        } catch (Exception e) {
+                            log.error("Lỗi serialize condition JSON edge {}: {}", edgeDTO.getId(), e.getMessage());
+                        }
                     }
 
                     // 4. Lưu Transition xuống database (cột label và cột conditions)
@@ -557,6 +569,9 @@ public class WorkflowServiceImpl implements WorkflowService {
             case "assignment" -> NodeType.Assignment;
             case "notification" -> NodeType.Notification;
             case "systemaction", "system_action" -> NodeType.SystemAction;
+            case "condition" -> NodeType.Condition;
+            case "parallel" -> NodeType.Parallel;
+            case "join" -> NodeType.Join;
             case "end" -> NodeType.End;
             default -> NodeType.Start;
         };
@@ -572,6 +587,9 @@ public class WorkflowServiceImpl implements WorkflowService {
             case Assignment -> "assignment";
             case Notification -> "notification";
             case SystemAction -> "system_action";
+            case Condition -> "condition";
+            case Parallel -> "parallel";
+            case Join -> "join";
             case End -> "end";
         };
     }

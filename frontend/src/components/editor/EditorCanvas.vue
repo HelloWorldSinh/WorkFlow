@@ -43,7 +43,7 @@ const PORT_CONDITION_Y_IF = 20
 const PORT_CONDITION_Y_ELSE = 48
 
 function getNodeHeight(type: EditorNodeType): number {
-  return type === 'approval' || type === 'condition' ? 68 : 52
+  return type === 'approval' || type === 'condition' || type === 'parallel' ? 68 : 52
 }
 
 // Convert Screen coordinates to Canvas internal coordinates (accounting for pan & zoom)
@@ -200,6 +200,17 @@ const handlePortMouseDown = (
     return
   }
 
+  // Chặn không cho kéo thêm nếu cổng else / fallback này đã có 1 đường nối ra
+  if (branch === 'else') {
+    const hasElseEdge = editorStore.edges.some(
+      (e) => e.fromNodeId === sourceNodeId && (e.branchType === 'else' || e.branchType === 'default' || e.label === 'ELSE')
+    )
+    if (hasElseEdge) {
+      editorStore.showToast(`Đầu ra Mặc định (ELSE / Fallback) đã có đường nối. Mỗi bước chỉ được phép kéo 1 nhánh mặc định.`, 'error')
+      return
+    }
+  }
+
   // Ensure we don't accidentally start node dragging
   isDraggingNode.value = false
   draggedNodeId.value = null
@@ -221,27 +232,31 @@ const handlePortMouseUp = (e: MouseEvent, targetNodeId: string) => {
           edgeSourceNodeId.value,
           targetNodeId,
           'Approved',
-          [{ fieldKey: 'action', operator: 'EQUALS', compareValue: 'APPROVED', dataType: 'STRING', logicOp: 'AND' }],
+          [],
           'CUSTOM',
           'approved'
         )
+        const newEdge = editorStore.edges[editorStore.edges.length - 1]
+        if (newEdge) newEdge.conditionExpression = 'action == "APPROVED"'
       } else if (edgeSourceBranch.value === 'rejected') {
         editorStore.addEdge(
           edgeSourceNodeId.value,
           targetNodeId,
           'Rejected',
-          [{ fieldKey: 'action', operator: 'EQUALS', compareValue: 'REJECTED', dataType: 'STRING', logicOp: 'AND' }],
+          [],
           'CUSTOM',
           'rejected'
         )
+        const newEdge = editorStore.edges[editorStore.edges.length - 1]
+        if (newEdge) newEdge.conditionExpression = 'action == "REJECTED"'
       } else if (edgeSourceBranch.value === 'else') {
         editorStore.addEdge(
           edgeSourceNodeId.value,
           targetNodeId,
           'ELSE',
-          [{ fieldKey: 'fallback', operator: 'EQUALS', compareValue: 'ELSE', dataType: 'STRING' }],
-          'CUSTOM',
-          'default'
+          [],
+          'ALWAYS',
+          'else'
         )
       } else if (edgeSourceBranch.value === 'condition') {
         editorStore.addEdge(
@@ -284,6 +299,19 @@ const handleOutputPortMouseUp = (
         if (branchExists) {
           const branchLabel = branch === 'approved' ? 'Phê duyệt (Approved)' : 'Từ chối (Rejected)'
           editorStore.showToast(`Đầu ra "${branchLabel}" đã có đường nối! Mỗi đầu ra chỉ được kết nối 1 điều kiện.`, 'error')
+          return
+        }
+      }
+
+      if (branch === 'else') {
+        const hasElseEdge = editorStore.edges.some(
+          (edge) =>
+            edge.id !== reconnectingEdgeId.value &&
+            edge.fromNodeId === sourceNodeId &&
+            (edge.branchType === 'else' || edge.branchType === 'default' || edge.label === 'ELSE')
+        )
+        if (hasElseEdge) {
+          editorStore.showToast(`Đầu ra Mặc định (ELSE / Fallback) đã có đường nối! Mỗi bước chỉ được phép nối 1 nhánh mặc định.`, 'error')
           return
         }
       }
@@ -510,7 +538,7 @@ const computedEdges = computed<EdgePathData[]>(() => {
       } else if (isRejected) {
         sy = fromNode.position.y + PORT_APPROVAL_Y_REJECTED
       }
-    } else if (fromNode.type === 'condition') {
+    } else if (fromNode.type === 'condition' || fromNode.type === 'parallel') {
       if (isElse) {
         sy = fromNode.position.y + PORT_CONDITION_Y_ELSE
       } else {
@@ -567,7 +595,7 @@ const liveDrawingPath = computed(() => {
     } else if (edgeSourceBranch.value === 'rejected') {
       sy = sourceNode.position.y + PORT_APPROVAL_Y_REJECTED
     }
-  } else if (sourceNode.type === 'condition') {
+  } else if (sourceNode.type === 'condition' || sourceNode.type === 'parallel') {
     if (edgeSourceBranch.value === 'else') {
       sy = sourceNode.position.y + PORT_CONDITION_Y_ELSE
     } else {
@@ -943,8 +971,8 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
             </div>
           </template>
 
-          <!-- SPECIAL FOR CONDITION: 2 Output Ports (Condition Branch & ELSE Fallback) -->
-          <template v-else-if="node.type === 'condition'">
+          <!-- SPECIAL FOR CONDITION & PARALLEL: 2 Output Ports (Condition Branch & ELSE Fallback) -->
+          <template v-else-if="node.type === 'condition' || node.type === 'parallel'">
             <!-- Top Output Port: Nhánh điều kiện -->
             <div
               class="port-handle port-condition-head port-if-head"
