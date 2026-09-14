@@ -8,6 +8,17 @@ const editorStore = useWorkflowEditorStore()
 const handleBack = () => {
   router.push('/')
 }
+
+const handleOpenMatch = () => {
+  if (editorStore.workflowId) {
+    router.push({
+      path: `/workflows/${editorStore.workflowId}/match-form`,
+      query: { workflowId: editorStore.workflowId },
+    })
+  } else {
+    router.push('/match-form')
+  }
+}
 </script>
 
 <template>
@@ -44,8 +55,22 @@ const handleBack = () => {
       </div>
     </div>
 
-    <!-- RIGHT: Action Buttons (Validate, Save Draft, Publish) -->
+    <!-- RIGHT: Action Buttons (Match Form, Validate, Save Draft, Publish) -->
     <div class="topbar-right">
+      <!-- Match Form Button -->
+      <button
+        type="button"
+        class="action-btn btn-match"
+        title="Mở màn hình ghép Biểu mẫu và Quy trình (Data Mapping & Permissions)"
+        @click="handleOpenMatch"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+        </svg>
+        <span>Ghép Biểu Mẫu</span>
+      </button>
+
       <!-- Validate Workflow -->
       <button
         type="button"
@@ -245,6 +270,21 @@ const handleBack = () => {
   font-weight: 600;
   transition: all 0.2s ease;
   cursor: pointer;
+}
+
+.btn-match {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #a7f3d0;
+  backdrop-filter: blur(6px);
+}
+
+.btn-match:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.35);
+  color: #ffffff;
+  border-color: #34d399;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
 }
 
 .btn-validate {

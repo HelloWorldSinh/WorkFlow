@@ -142,8 +142,37 @@ const startReconnectingEdge = (e: MouseEvent, edge: WorkflowEditorEdge, mode: 's
   editorStore.selectEdge(edge.id)
 }
 
+const isApprovalBranchEdge = (edge: WorkflowEditorEdge, branch: 'approved' | 'rejected'): boolean => {
+  if (edge.branchType === branch) return true
+  if (branch === 'approved') {
+    return (
+      (edge.label?.toLowerCase().includes('approv') ?? false) ||
+      (edge.label?.toLowerCase().includes('duyệt') ?? false) ||
+      (edge.conditions?.some((c) => c.compareValue === 'APPROVED') ?? false)
+    )
+  } else {
+    return (
+      (edge.label?.toLowerCase().includes('reject') ?? false) ||
+      (edge.label?.toLowerCase().includes('từ chối') ?? false) ||
+      (edge.conditions?.some((c) => c.compareValue === 'REJECTED') ?? false)
+    )
+  }
+}
+
+const hasApprovalBranchEdge = (nodeId: string, branch: 'approved' | 'rejected'): boolean => {
+  return editorStore.edges.some((e) => e.fromNodeId === nodeId && isApprovalBranchEdge(e, branch))
+}
+
 const handlePortMouseDown = (e: MouseEvent, sourceNodeId: string, branch?: 'approved' | 'rejected') => {
   e.stopPropagation()
+
+  // Chặn không cho kéo thêm nếu cổng approval này đã có 1 đường nối ra
+  if (branch && hasApprovalBranchEdge(sourceNodeId, branch)) {
+    const branchLabel = branch === 'approved' ? 'Phê duyệt (Approved)' : 'Từ chối (Rejected)'
+    editorStore.showToast(`Đầu ra "${branchLabel}" đã có đường nối. Mỗi đầu ra chỉ được kéo 1 điều kiện.`, 'error')
+    return
+  }
+
   // Ensure we don't accidentally start node dragging
   isDraggingNode.value = false
   draggedNodeId.value = null
@@ -157,6 +186,7 @@ const handlePortMouseDown = (e: MouseEvent, sourceNodeId: string, branch?: 'appr
 }
 
 const handlePortMouseUp = (e: MouseEvent, targetNodeId: string) => {
+  e.stopPropagation()
   if (isDrawingEdge.value && edgeSourceNodeId.value) {
     if (edgeSourceNodeId.value !== targetNodeId) {
       if (edgeSourceBranch.value === 'approved') {
@@ -190,11 +220,29 @@ const handlePortMouseUp = (e: MouseEvent, targetNodeId: string) => {
   }
 }
 
-const handleOutputPortMouseUp = (e: MouseEvent, sourceNodeId: string) => {
+const handleOutputPortMouseUp = (e: MouseEvent, sourceNodeId: string, branch?: 'approved' | 'rejected') => {
+  e.stopPropagation()
   if (isReconnectingEdge.value && reconnectingEdgeId.value && reconnectMode.value === 'source') {
     if (reconnectFixedNodeId.value !== sourceNodeId) {
-      editorStore.updateEdge(reconnectingEdgeId.value, { fromNodeId: sourceNodeId })
       const sourceNode = editorStore.nodes.find((n) => n.id === sourceNodeId)
+      if (sourceNode?.type === 'approval' && branch) {
+        const branchExists = editorStore.edges.some(
+          (edge) =>
+            edge.id !== reconnectingEdgeId.value &&
+            edge.fromNodeId === sourceNodeId &&
+            isApprovalBranchEdge(edge, branch)
+        )
+        if (branchExists) {
+          const branchLabel = branch === 'approved' ? 'Phê duyệt (Approved)' : 'Từ chối (Rejected)'
+          editorStore.showToast(`Đầu ra "${branchLabel}" đã có đường nối! Mỗi đầu ra chỉ được kết nối 1 điều kiện.`, 'error')
+          return
+        }
+      }
+
+      editorStore.updateEdge(reconnectingEdgeId.value, {
+        fromNodeId: sourceNodeId,
+        ...(branch ? { branchType: branch } : {}),
+      })
       editorStore.showToast(`Đã chuyển điểm bắt đầu sang bước "${sourceNode?.name || sourceNodeId}"`, 'success')
     }
   }
@@ -781,9 +829,14 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
             <!-- Approved Output Head (Top-Right) -->
             <div
               class="port-handle port-approval-head port-approved-head"
-              title="Kéo từ đây sang bước tiếp theo khi DUYỆT (Approved)"
+              :class="{ 'is-connected': hasApprovalBranchEdge(node.id, 'approved') }"
+              :title="
+                hasApprovalBranchEdge(node.id, 'approved')
+                  ? 'Đầu ra Phê duyệt đã có kết nối (mỗi đầu ra chỉ được kéo 1 điều kiện)'
+                  : 'Kéo từ đây sang bước tiếp theo khi DUYỆT (Approved)'
+              "
               @mousedown="handlePortMouseDown($event, node.id, 'approved')"
-              @mouseup="handleOutputPortMouseUp($event, node.id)"
+              @mouseup="handleOutputPortMouseUp($event, node.id, 'approved')"
             >
               <div class="port-dot dot-approved"></div>
             </div>
@@ -791,9 +844,14 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
             <!-- Rejected Output Head (Bottom-Right) -->
             <div
               class="port-handle port-approval-head port-rejected-head"
-              title="Kéo từ đây sang bước tiếp theo khi TỪ CHỐI (Rejected)"
+              :class="{ 'is-connected': hasApprovalBranchEdge(node.id, 'rejected') }"
+              :title="
+                hasApprovalBranchEdge(node.id, 'rejected')
+                  ? 'Đầu ra Từ chối đã có kết nối (mỗi đầu ra chỉ được kéo 1 điều kiện)'
+                  : 'Kéo từ đây sang bước tiếp theo khi TỪ CHỐI (Rejected)'
+              "
               @mousedown="handlePortMouseDown($event, node.id, 'rejected')"
-              @mouseup="handleOutputPortMouseUp($event, node.id)"
+              @mouseup="handleOutputPortMouseUp($event, node.id, 'rejected')"
             >
               <div class="port-dot dot-rejected"></div>
             </div>
@@ -1219,6 +1277,29 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
 .port-approval-head:hover .dot-rejected {
   background: #ef4444;
   transform: scale(1.35);
+}
+
+/* When approval output port is already connected */
+.port-approval-head.is-connected {
+  cursor: not-allowed;
+}
+
+.port-approval-head.is-connected .dot-approved {
+  background: #10b981;
+}
+
+.port-approval-head.is-connected .dot-rejected {
+  background: #ef4444;
+}
+
+.port-approval-head.is-connected:hover .dot-approved {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
+}
+
+.port-approval-head.is-connected:hover .dot-rejected {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
 }
 
 .port-dot {

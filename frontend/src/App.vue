@@ -89,6 +89,13 @@ const handleLogout = () => {
             </svg>
             <span>Biểu mẫu</span>
           </router-link>
+          <router-link to="/match-form" class="nav-item" :class="{ active: route.path.includes('/match-form') }">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            <span>Ghép Biểu Mẫu</span>
+          </router-link>
           <router-link to="/tickets" class="nav-item" :class="{ active: route.path.startsWith('/tickets') }">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>

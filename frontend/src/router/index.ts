@@ -7,6 +7,8 @@ import TicketListView from '@/views/TicketListView.vue'
 import TicketDetailView from '@/views/TicketDetailView.vue'
 import MyTasksView from '@/views/MyTasksView.vue'
 
+import WorkflowFormMatchView from '@/views/WorkflowFormMatchView.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -35,6 +37,16 @@ const router = createRouter({
     {
       path: '/workflows/:id/edit',
       redirect: (to) => `/workflows/${to.params.id}/editor`,
+    },
+    {
+      path: '/workflows/:id/match-form',
+      name: 'workflow-match-form',
+      component: WorkflowFormMatchView,
+    },
+    {
+      path: '/match-form',
+      name: 'match-form',
+      component: WorkflowFormMatchView,
     },
     {
       path: '/editor',

@@ -268,6 +268,36 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     const exists = edges.value.some((e) => e.fromNodeId === fromNodeId && e.toNodeId === toNodeId)
     if (exists) return
 
+    // Kiểm tra giới hạn: Node approval mỗi output (approved / rejected) chỉ được nối tối đa 1 điều kiện
+    const fromNode = nodes.value.find((n) => n.id === fromNodeId)
+    if (fromNode && fromNode.type === 'approval' && (branchType === 'approved' || branchType === 'rejected')) {
+      const branchExists = edges.value.some((e) => {
+        if (e.fromNodeId !== fromNodeId) return false
+        if (e.branchType === branchType) return true
+        if (branchType === 'approved') {
+          return (
+            (e.label?.toLowerCase().includes('approv') ?? false) ||
+            (e.label?.toLowerCase().includes('duyệt') ?? false) ||
+            (e.conditions?.some((c) => c.compareValue === 'APPROVED') ?? false)
+          )
+        } else {
+          return (
+            (e.label?.toLowerCase().includes('reject') ?? false) ||
+            (e.label?.toLowerCase().includes('từ chối') ?? false) ||
+            (e.conditions?.some((c) => c.compareValue === 'REJECTED') ?? false)
+          )
+        }
+      })
+
+      if (branchExists) {
+        showToast(
+          `Đầu ra "${branchType === 'approved' ? 'Phê duyệt' : 'Từ chối'}" đã có đường nối! Mỗi đầu ra chỉ được kéo 1 điều kiện.`,
+          'error'
+        )
+        return
+      }
+    }
+
     const newEdge: WorkflowEditorEdge = {
       id: `edge-${Date.now().toString().slice(-4)}`,
       fromNodeId,

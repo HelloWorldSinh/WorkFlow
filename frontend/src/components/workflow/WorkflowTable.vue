@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflowStore'
 import type { WorkflowItem } from '@/types/workflow'
 import Badge from '@/components/common/Badge.vue'
 
+const router = useRouter()
 const store = useWorkflowStore()
 
 const emit = defineEmits<{
@@ -147,6 +149,18 @@ const formatDate = (dateStr?: string | Date) => {
                   </svg>
                 </button>
 
+                <!-- Match Form Action -->
+                <button
+                  class="action-btn"
+                  title="Ghép Biểu Mẫu (Match Form)"
+                  @click="router.push(`/workflows/${wf.id}/match-form`)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                  </svg>
+                </button>
+
                 <!-- History Log Action -->
                 <button
                   class="action-btn"
@@ -181,6 +195,14 @@ const formatDate = (dateStr?: string | Date) => {
 
                   <!-- Context Dropdown -->
                   <div v-if="activeMenuId === String(wf.id)" class="dropdown-menu">
+                    <button class="dropdown-item" @click="router.push(`/workflows/${wf.id}/match-form`)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      <span>Ghép Biểu Mẫu (Match Form)</span>
+                    </button>
+
                     <button class="dropdown-item" @click="emit('view-instances', wf)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>

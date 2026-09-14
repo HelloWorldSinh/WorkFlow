@@ -10,18 +10,6 @@ const editorStore = useWorkflowEditorStore()
 const formStore = useFormStore()
 const systemUsers = ref<UserSummary[]>([])
 
-const isRefreshingForms = ref(false)
-
-const handleRefreshForms = async () => {
-  isRefreshingForms.value = true
-  try {
-    await formStore.fetchForms()
-  } finally {
-    setTimeout(() => {
-      isRefreshingForms.value = false
-    }, 400)
-  }
-}
 
 onMounted(async () => {
   if (formStore.forms.length === 0) {
@@ -47,37 +35,6 @@ onMounted(async () => {
 const node = computed(() => editorStore.selectedNode)
 const edge = computed(() => editorStore.selectedEdge)
 
-const currentBoundForm = computed(() => {
-  if (!node.value?.formBinding?.formId) return null
-  return formStore.getFormById(node.value.formBinding.formId) || null
-})
-
-const handleFormSelect = (formIdVal: string) => {
-  if (!node.value) return
-  if (!formIdVal) {
-    node.value.formBinding = undefined
-    if (node.value.config) node.value.config.formName = ''
-    editorStore.isDirty = true
-    return
-  }
-  const form = formStore.getFormById(formIdVal)
-  if (!form) return
-
-  const permissions: Record<string, 'editable' | 'readonly' | 'hidden'> = {}
-  form.schema.fields.forEach((f) => {
-    permissions[f.key] = node.value?.type === 'start' ? 'editable' : 'readonly'
-  })
-
-  node.value.formBinding = {
-    formId: form.id,
-    formName: form.name,
-    fieldPermissions: permissions,
-  }
-  if (node.value.config) {
-    node.value.config.formName = form.name
-  }
-  editorStore.isDirty = true
-}
 
 const nodeTypeMeta = computed(() => {
   if (!node.value) return null
@@ -277,14 +234,57 @@ const availableConditionFields = computed<ConditionFieldOption[]>(() => {
     })
   }
 
-  // 3. Common ticket system variables
+  // 3. Biến quy trình độc lập (Data Contract - Cho phép định nghĩa trước khi Match Form)
+  list.push(
+    {
+      key: 'amount',
+      label: 'Tổng kinh phí / Số tiền (amount)',
+      type: 'number',
+      dataType: 'NUMBER',
+      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
+    },
+    {
+      key: 'expense_type',
+      label: 'Loại chi phí (expense_type)',
+      type: 'select',
+      dataType: 'STRING',
+      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
+      options: [
+        { label: 'Thiết bị IT', value: 'it_hardware' },
+        { label: 'Văn phòng phẩm', value: 'stationery' },
+        { label: 'Công tác phí', value: 'travel' },
+        { label: 'Đào tạo', value: 'training' },
+        { label: 'Khác', value: 'other' },
+      ],
+    },
+    {
+      key: 'leave_days',
+      label: 'Số ngày nghỉ phép (leave_days)',
+      type: 'number',
+      dataType: 'NUMBER',
+      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
+    },
+    {
+      key: 'urgent_flag',
+      label: 'Đơn khẩn cấp (urgent_flag)',
+      type: 'checkbox',
+      dataType: 'BOOLEAN',
+      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
+      options: [
+        { label: 'Khẩn cấp (true)', value: 'true' },
+        { label: 'Bình thường (false)', value: 'false' },
+      ],
+    }
+  )
+
+  // 4. Common ticket system variables
   list.push(
     {
       key: 'ticket_priority',
       label: 'Mức độ ưu tiên (Priority)',
       type: 'select',
       dataType: 'STRING',
-      sourceGroup: 'Thông tin Ticket',
+      sourceGroup: 'Thông tin Hệ thống',
       options: [
         { label: 'Khẩn cấp (urgent)', value: 'urgent' },
         { label: 'Cao (high)', value: 'high' },
@@ -297,9 +297,24 @@ const availableConditionFields = computed<ConditionFieldOption[]>(() => {
       label: 'Phòng ban người gửi (Department)',
       type: 'text',
       dataType: 'STRING',
-      sourceGroup: 'Thông tin Ticket',
+      sourceGroup: 'Thông tin Hệ thống',
     }
   )
+
+  // 5. Thêm các biến tùy chỉnh người dùng đã nhập trên Edge (nếu có)
+  if (edge.value?.conditions) {
+    edge.value.conditions.forEach((r) => {
+      if (r.fieldKey && !list.some((item) => item.key === r.fieldKey)) {
+        list.push({
+          key: r.fieldKey,
+          label: `Biến tùy chỉnh: ${r.fieldKey}`,
+          type: r.dataType === 'NUMBER' ? 'number' : 'text',
+          dataType: r.dataType || 'STRING',
+          sourceGroup: 'Biến quy trình tùy chỉnh',
+        })
+      }
+    })
+  }
 
   return list
 })
@@ -933,101 +948,6 @@ const autoGenerateEdgeLabel = () => {
             </select>
           </div>
 
-          <!-- FORM BINDING SECTION -->
-          <div v-if="node.config.triggerType === 'form_submission'" class="form-binding-box">
-            <div class="binding-header">
-              <label class="form-label required binding-label">Biểu mẫu yêu cầu</label>
-              <div class="binding-header-actions">
-                <button
-                  type="button"
-                  class="btn-refresh-forms"
-                  :class="{ 'is-spinning': isRefreshingForms }"
-                  title="Tải lại danh sách biểu mẫu"
-                  @click="handleRefreshForms"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-                </button>
-                <router-link to="/forms" target="_blank" class="link-manage-forms">
-                  Thư viện ↗
-                </router-link>
-              </div>
-            </div>
-
-            <select
-              :value="node.formBinding?.formId || ''"
-              class="form-control select-form-accent"
-              @change="handleFormSelect(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">-- Chọn biểu mẫu gắn vào Ticket này --</option>
-              <option
-                v-for="f in formStore.forms"
-                :key="f.id"
-                :value="f.id"
-              >
-                📋 {{ f.name }}
-              </option>
-            </select>
-
-            <!-- WHEN A FORM IS BOUND -->
-            <div v-if="currentBoundForm" class="bound-form-details">
-              <div class="form-actions-inline">
-                <button
-                  type="button"
-                  class="btn-inline-action"
-                  @click="formStore.openPreviewModal(currentBoundForm)"
-                >
-                  👁️ Xem trước
-                </button>
-                <button
-                  type="button"
-                  class="btn-inline-action btn-sim-inline"
-                  @click="formStore.openSimulationModal(currentBoundForm, node.formBinding?.fieldPermissions)"
-                >
-                  🚀 Chạy thử Ticket
-                </button>
-              </div>
-
-              <!-- FIELD PERMISSIONS MATRIX (Ẩn tạm thời chưa sử dụng)
-              <div class="permissions-matrix-wrap">
-                <div class="matrix-title">
-                  <span>Ma trận phân quyền trường</span>
-                  <span class="matrix-hint">Quyền tại bước khởi tạo</span>
-                </div>
-
-                <div class="matrix-table">
-                  <div
-                    v-for="field in currentBoundForm?.schema?.fields || []"
-                    :key="field.id"
-                    class="matrix-row"
-                  >
-                    <div class="matrix-field-info">
-                      <span class="m-label">{{ field.label }}</span>
-                      <span class="m-key">{{ field.key }}</span>
-                    </div>
-
-                    <select
-                      v-if="node?.formBinding"
-                      v-model="node.formBinding.fieldPermissions[field.key]"
-                      class="matrix-select"
-                    >
-                      <option value="editable">✏️ Bắt buộc/Sửa</option>
-                      <option value="readonly">🔒 Chỉ xem</option>
-                      <option value="hidden">🚫 Ẩn trường</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-              -->
-            </div>
-
-            <div v-else class="binding-placeholder-note">
-              💡 Hãy chọn một biểu mẫu để yêu cầu người dùng điền thông tin khi tạo Ticket.
-            </div>
-          </div>
         </div>
 
         <!-- 8. Specific Form for END NODE -->
@@ -1190,7 +1110,7 @@ const autoGenerateEdgeLabel = () => {
                             :key="f.key"
                             :value="f.key"
                           >
-                            {{ f.key }}
+                            {{ f.label || f.key }}
                           </option>
                         </optgroup>
                       </select>
