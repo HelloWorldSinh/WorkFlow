@@ -6,6 +6,9 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "task_instances")
 @Data
@@ -41,6 +44,7 @@ public class TaskInstance {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
-    @Column(name = "step_submitted_data", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "step_submitted_data", columnDefinition = "jsonb")
     private String stepSubmittedData;
 }

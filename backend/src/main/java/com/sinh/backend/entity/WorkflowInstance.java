@@ -7,6 +7,9 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "workflow_instances")
 @Data
@@ -42,6 +45,7 @@ public class WorkflowInstance {
     @Column(name = "end_time")
     private LocalDateTime endTime;
 
-    @Column(name = "variables", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "variables", columnDefinition = "jsonb")
     private String variables;
 }
