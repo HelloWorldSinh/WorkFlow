@@ -389,11 +389,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   function selectNode(id: string | null) {
     selectedNodeId.value = id
     selectedEdgeId.value = null
-    const targetNode = nodes.value.find((n) => n.id === id)
-    const isBranching =
-      targetNode &&
-      (targetNode.type === 'condition' || targetNode.type === 'parallel' || targetNode.type === 'join')
-    isPropertiesPanelOpen.value = !!id && !isBranching
+    isPropertiesPanelOpen.value = !!id
   }
 
   function selectEdge(id: string | null) {

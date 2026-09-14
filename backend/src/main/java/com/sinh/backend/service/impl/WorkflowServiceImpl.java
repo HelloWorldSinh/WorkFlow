@@ -361,24 +361,16 @@ public class WorkflowServiceImpl implements WorkflowService {
                         label = expression;
                     }
 
-                    // 3. Đóng gói payload JSON cấu hình điều kiện
-                    Map<String, Object> conditionMap = new HashMap<>();
+                    // 3. Đóng gói payload JSON cấu hình điều kiện (tinh gọn, không lặp lại trường rác)
+                    Map<String, Object> conditionMap = new LinkedHashMap<>();
                     if (expression != null && !expression.trim().isEmpty()) {
                         conditionMap.put("expression", expression);
-                        conditionMap.put("tree", conditionTree);
                         conditionMap.put("conditionTree", conditionTree);
                     }
-                    if (edgeDTO.getMatchType() != null) {
-                        conditionMap.put("matchType", edgeDTO.getMatchType());
-                    } else if (edgeDTO.getConditions() != null) {
-                        conditionMap.put("matchType", "CUSTOM");
+                    if (edgeDTO.getPriority() != null) {
+                        conditionMap.put("priority", edgeDTO.getPriority());
                     } else {
-                        conditionMap.put("matchType", "ALWAYS");
-                    }
-
-                    if (edgeDTO.getConditions() != null) {
-                        conditionMap.put("rules", edgeDTO.getConditions());
-                        conditionMap.put("conditions", edgeDTO.getConditions());
+                        conditionMap.put("priority", 1);
                     }
                     if (edgeDTO.getId() != null) {
                         conditionMap.put("clientEdgeId", edgeDTO.getId());

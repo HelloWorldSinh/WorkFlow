@@ -41,6 +41,7 @@ const nodeTypeMeta = computed(() => {
   return (
     editorStore.nodePalette.find((p) => p.type === node.value?.type) || {
       title: node.value?.type,
+      icon: '⚡',
       color: '#6366f1',
       bg: '#eef2ff',
     }
@@ -350,8 +351,21 @@ watch(
            FORM FOR SELECTED NODE
            ========================================================== -->
       <div v-if="node" class="dynamic-form">
-        <!-- 1. Common Fields: Name & Description -->
-        <div class="form-section">
+        <!-- Gateway Info Box for Branching & Navigation Nodes -->
+        <div v-if="node.type === 'condition' || node.type === 'parallel' || node.type === 'join'" class="form-section gateway-info-section">
+          <div class="gateway-info-card">
+            <span class="gateway-card-icon" :style="{ color: nodeTypeMeta?.color }">
+              {{ nodeTypeMeta?.icon || '⚡' }}
+            </span>
+            <div class="gateway-card-content">
+              <strong>{{ nodeTypeMeta?.title }}</strong>
+              <p>Bước rẽ nhánh & điều hướng không cần cài đặt thông số. Bạn có thể nhấn nút <strong>Xóa Bước Này</strong> bên dưới để gỡ khỏi sơ đồ.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 1. Common Fields: Name & Description (for non-gateway nodes) -->
+        <div v-else class="form-section">
           <div class="section-title">Thông tin chung</div>
           
           <div class="form-group">
@@ -811,71 +825,6 @@ watch(
           </div>
         </div>
 
-        <!-- 9. Specific Form for CONDITION NODE -->
-        <div v-if="node.type === 'condition'" class="form-section">
-          <div class="section-title">Cấu hình Rẽ nhánh Điều kiện (If/Else)</div>
-
-          <div class="form-group">
-            <label class="form-label">Cổng đầu ra (Output Ports)</label>
-            <div class="mode-toggle-group" style="flex-direction: column; gap: 0.5rem;">
-              <div class="btn-mode-tab active" style="justify-content: flex-start; gap: 0.5rem; cursor: default;">
-                <span class="mode-icon" style="color: #ec4899;">●</span>
-                <span class="mode-text">Port trên: <strong>Nhánh điều kiện (If)</strong></span>
-              </div>
-              <div class="btn-mode-tab active" style="justify-content: flex-start; gap: 0.5rem; cursor: default; background: #fffbeb; border-color: #fde68a;">
-                <span class="mode-icon" style="color: #f59e0b;">●</span>
-                <span class="mode-text" style="color: #92400e;">Port dưới: <strong>ELSE (Fallback mặc định)</strong></span>
-              </div>
-            </div>
-            <span class="form-help-text" style="margin-top: 0.5rem; display: block; font-size: 0.75rem; color: #64748b;">
-              💡 <strong>Hướng dẫn:</strong> Kéo từ Port dưới (ELSE) đến bước tiếp theo để xử lý fallback khi không có điều kiện nào thỏa mãn.
-            </span>
-          </div>
-        </div>
-
-        <!-- 10. Specific Form for PARALLEL NODE -->
-        <div v-if="node.type === 'parallel'" class="form-section">
-          <div class="section-title">Cấu hình Rẽ nhánh Song song</div>
-
-          <div class="form-group">
-            <label class="form-label required">Chế độ phân nhánh</label>
-            <select v-model="node.config.joinMode" class="form-control" @change="editorStore.isDirty = true">
-              <option value="all">Kích hoạt tất cả các luồng đầu ra đồng thời (Fork Parallel)</option>
-            </select>
-            <span class="form-help-text" style="margin-top: 0.5rem; display: block; font-size: 0.75rem; color: #64748b;">
-              ⚡ Tất cả các bước nối từ node này sẽ được kích hoạt xử lý đồng thời.
-            </span>
-          </div>
-        </div>
-
-        <!-- 11. Specific Form for JOIN NODE -->
-        <div v-if="node.type === 'join'" class="form-section">
-          <div class="section-title">Cấu hình Hợp luồng Song song (Join / Merge)</div>
-
-          <div class="form-group">
-            <label class="form-label required">Quy tắc hợp luồng (Join Strategy)</label>
-            <select v-model="node.config.joinStrategy" class="form-control" @change="editorStore.isDirty = true">
-              <option value="wait_all">Chờ tất cả các luồng song song hoàn tất (Wait All Threads)</option>
-              <option value="first_come">Tiếp tục ngay khi luồng đầu tiên hoàn tất (First Come / Any)</option>
-              <option value="n_of_m">Chờ tối thiểu N luồng hoàn tất (N of M)</option>
-            </select>
-            <span class="form-help-text" style="margin-top: 0.5rem; display: block; font-size: 0.75rem; color: #64748b;">
-              ⇶ Điểm hợp luồng sẽ thu gom các luồng xử lý song song và đồng bộ hóa lại thành 1 luồng duy nhất để đi tiếp.
-            </span>
-          </div>
-
-          <div v-if="node.config.joinStrategy === 'n_of_m'" class="form-group">
-            <label class="form-label required">Số luồng tối thiểu cần hoàn tất (N)</label>
-            <input
-              v-model.number="node.config.requiredCount"
-              type="number"
-              min="1"
-              class="form-control"
-              placeholder="2"
-              @change="editorStore.isDirty = true"
-            />
-          </div>
-        </div>
       </div>
 
       <!-- ==========================================================
@@ -912,14 +861,29 @@ watch(
           </div>
 
 
-          <div class="form-group">
-            <label class="form-label">Nhãn hiển thị trên đường nối</label>
-            <input
-              v-model="edge.label"
-              type="text"
-              class="form-control"
-              placeholder="Ví dụ: Đồng ý, Từ chối, Giá trị > 10M..."
-            />
+          <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+              <label class="form-label">Nhãn đường nối</label>
+              <input
+                v-model="edge.label"
+                type="text"
+                class="form-control"
+                placeholder="Ví dụ: Đồng ý, Từ chối, >10M..."
+              />
+            </div>
+
+            <div class="form-group" style="flex: 1; min-width: 90px;">
+              <label class="form-label" title="Thứ tự ưu tiên xét điều kiện (1 = Kiểm tra đầu tiên)">Ưu tiên (#)</label>
+              <input
+                v-model.number="edge.priority"
+                type="number"
+                min="1"
+                max="999"
+                class="form-control text-center font-bold"
+                placeholder="1"
+                @change="editorStore.isDirty = true"
+              />
+            </div>
           </div>
 
           <!-- TRANSITION CONDITION EXPRESSION EDITOR -->
@@ -2059,6 +2023,36 @@ watch(
   color: #3730a3;
   display: block;
   margin-bottom: 2px;
+}
+
+/* Gateway info box */
+.gateway-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.gateway-card-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.gateway-card-content strong {
+  font-size: 0.875rem;
+  color: #1e293b;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.gateway-card-content p {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0;
 }
 
 /* ==========================================================

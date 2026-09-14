@@ -145,6 +145,7 @@ export interface WorkflowEditorEdge {
   fromNodeId: string
   toNodeId: string
   label?: string
+  priority?: number
   conditionExpression?: string
   matchType?: ConditionMatchType
   conditions?: TransitionRule[]
