@@ -71,6 +71,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   const nodePalette = [
     {
       type: 'start' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Start',
       title: 'Bắt đầu',
       icon: '▶',
@@ -80,6 +81,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'approval' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Approval',
       title: 'Phê duyệt',
       icon: '✓',
@@ -89,6 +91,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'review' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Review',
       title: 'Soát xét',
       icon: '👁',
@@ -98,6 +101,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'assignment' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Assignment',
       title: 'Phân việc',
       icon: '👤',
@@ -107,6 +111,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'notification' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Notification',
       title: 'Thông báo',
       icon: '🔔',
@@ -116,6 +121,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'system_action' as EditorNodeType,
+      category: 'functional' as const,
       label: 'System Action',
       title: 'Tác vụ hệ thống',
       icon: '⚡',
@@ -125,12 +131,43 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'end' as EditorNodeType,
+      category: 'functional' as const,
       label: 'End',
       title: 'Kết thúc',
       icon: '⏹',
       color: '#ef4444',
       bg: '#fef2f2',
       desc: 'Điểm kết thúc quy trình',
+    },
+    {
+      type: 'condition' as EditorNodeType,
+      category: 'branching' as const,
+      label: 'Condition',
+      title: 'Rẽ nhánh điều kiện',
+      icon: '🔀',
+      color: '#ec4899',
+      bg: '#fdf2f8',
+      desc: 'Rẽ nhánh theo điều kiện (If/Else)',
+    },
+    {
+      type: 'parallel' as EditorNodeType,
+      category: 'branching' as const,
+      label: 'Parallel',
+      title: 'Rẽ nhánh song song',
+      icon: '║',
+      color: '#0284c7',
+      bg: '#f0f9ff',
+      desc: 'Thực hiện song song nhiều luồng',
+    },
+    {
+      type: 'join' as EditorNodeType,
+      category: 'branching' as const,
+      label: 'Join',
+      title: 'Hợp luồng song song',
+      icon: '⇶',
+      color: '#0d9488',
+      bg: '#ccfbf1',
+      desc: 'Gộp các luồng song song về 1 điểm (Wait All)',
     },
   ]
 
@@ -203,6 +240,18 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
           httpMethod: 'POST' as const,
           endpointUrl: 'https://api.company.com/webhook',
         }
+      case 'condition':
+        return {
+          defaultBranch: 'ELSE',
+        }
+      case 'parallel':
+        return {
+          joinMode: 'all' as const,
+        }
+      case 'join':
+        return {
+          joinStrategy: 'wait_all' as const,
+        }
       case 'start':
         return {
           triggerType: 'form_submission' as const,
@@ -260,7 +309,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     label: string = '',
     conditions: TransitionRule[] = [],
     matchType: ConditionMatchType = 'ALWAYS',
-    branchType?: 'approved' | 'rejected' | 'default'
+    branchType?: 'approved' | 'rejected' | 'condition' | 'else' | 'default'
   ) {
     if (fromNodeId === toNodeId) return
 
@@ -340,7 +389,11 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   function selectNode(id: string | null) {
     selectedNodeId.value = id
     selectedEdgeId.value = null
-    isPropertiesPanelOpen.value = !!id
+    const targetNode = nodes.value.find((n) => n.id === id)
+    const isBranching =
+      targetNode &&
+      (targetNode.type === 'condition' || targetNode.type === 'parallel' || targetNode.type === 'join')
+    isPropertiesPanelOpen.value = !!id && !isBranching
   }
 
   function selectEdge(id: string | null) {

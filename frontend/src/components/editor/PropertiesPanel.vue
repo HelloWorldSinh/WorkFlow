@@ -973,6 +973,72 @@ const autoGenerateEdgeLabel = () => {
             ></textarea>
           </div>
         </div>
+
+        <!-- 9. Specific Form for CONDITION NODE -->
+        <div v-if="node.type === 'condition'" class="form-section">
+          <div class="section-title">Cấu hình Rẽ nhánh Điều kiện (If/Else)</div>
+
+          <div class="form-group">
+            <label class="form-label">Cổng đầu ra (Output Ports)</label>
+            <div class="mode-toggle-group" style="flex-direction: column; gap: 0.5rem;">
+              <div class="btn-mode-tab active" style="justify-content: flex-start; gap: 0.5rem; cursor: default;">
+                <span class="mode-icon" style="color: #ec4899;">●</span>
+                <span class="mode-text">Port trên: <strong>Nhánh điều kiện (If)</strong></span>
+              </div>
+              <div class="btn-mode-tab active" style="justify-content: flex-start; gap: 0.5rem; cursor: default; background: #fffbeb; border-color: #fde68a;">
+                <span class="mode-icon" style="color: #f59e0b;">●</span>
+                <span class="mode-text" style="color: #92400e;">Port dưới: <strong>ELSE (Fallback mặc định)</strong></span>
+              </div>
+            </div>
+            <span class="form-help-text" style="margin-top: 0.5rem; display: block; font-size: 0.75rem; color: #64748b;">
+              💡 <strong>Hướng dẫn:</strong> Kéo từ Port dưới (ELSE) đến bước tiếp theo để xử lý fallback khi không có điều kiện nào thỏa mãn.
+            </span>
+          </div>
+        </div>
+
+        <!-- 10. Specific Form for PARALLEL NODE -->
+        <div v-if="node.type === 'parallel'" class="form-section">
+          <div class="section-title">Cấu hình Rẽ nhánh Song song</div>
+
+          <div class="form-group">
+            <label class="form-label required">Chế độ phân nhánh</label>
+            <select v-model="node.config.joinMode" class="form-control" @change="editorStore.isDirty = true">
+              <option value="all">Kích hoạt tất cả các luồng đầu ra đồng thời (Fork Parallel)</option>
+            </select>
+            <span class="form-help-text" style="margin-top: 0.5rem; display: block; font-size: 0.75rem; color: #64748b;">
+              ⚡ Tất cả các bước nối từ node này sẽ được kích hoạt xử lý đồng thời.
+            </span>
+          </div>
+        </div>
+
+        <!-- 11. Specific Form for JOIN NODE -->
+        <div v-if="node.type === 'join'" class="form-section">
+          <div class="section-title">Cấu hình Hợp luồng Song song (Join / Merge)</div>
+
+          <div class="form-group">
+            <label class="form-label required">Quy tắc hợp luồng (Join Strategy)</label>
+            <select v-model="node.config.joinStrategy" class="form-control" @change="editorStore.isDirty = true">
+              <option value="wait_all">Chờ tất cả các luồng song song hoàn tất (Wait All Threads)</option>
+              <option value="first_come">Tiếp tục ngay khi luồng đầu tiên hoàn tất (First Come / Any)</option>
+              <option value="n_of_m">Chờ tối thiểu N luồng hoàn tất (N of M)</option>
+            </select>
+            <span class="form-help-text" style="margin-top: 0.5rem; display: block; font-size: 0.75rem; color: #64748b;">
+              ⇶ Điểm hợp luồng sẽ thu gom các luồng xử lý song song và đồng bộ hóa lại thành 1 luồng duy nhất để đi tiếp.
+            </span>
+          </div>
+
+          <div v-if="node.config.joinStrategy === 'n_of_m'" class="form-group">
+            <label class="form-label required">Số luồng tối thiểu cần hoàn tất (N)</label>
+            <input
+              v-model.number="node.config.requiredCount"
+              type="number"
+              min="1"
+              class="form-control"
+              placeholder="2"
+              @change="editorStore.isDirty = true"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- ==========================================================

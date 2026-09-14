@@ -21,19 +21,29 @@ const panStartPos = ref({ x: 0, y: 0 })
 // Connection Drawing State (Dragging from port)
 const isDrawingEdge = ref(false)
 const edgeSourceNodeId = ref<string | null>(null)
-const edgeSourceBranch = ref<'approved' | 'rejected' | null>(null)
+const edgeSourceBranch = ref<'approved' | 'rejected' | 'condition' | 'else' | null>(null)
 const edgeMousePos = ref({ x: 0, y: 0 })
 
 // Node Dimensions
-const NODE_WIDTH = 205
-const NODE_HEIGHT = 52
+const DEFAULT_NODE_WIDTH = 205
+const BRANCHING_NODE_WIDTH = 56
 
-// Approval Node Port Vertical Offsets (matching exact DOM port handle centers)
+function isBranchingNode(type: EditorNodeType): boolean {
+  return type === 'condition' || type === 'parallel' || type === 'join'
+}
+
+function getNodeWidth(type: EditorNodeType): number {
+  return isBranchingNode(type) ? BRANCHING_NODE_WIDTH : DEFAULT_NODE_WIDTH
+}
+
+// Port Vertical Offsets for Approval & Condition Nodes
 const PORT_APPROVAL_Y_APPROVED = 20
 const PORT_APPROVAL_Y_REJECTED = 48
+const PORT_CONDITION_Y_IF = 20
+const PORT_CONDITION_Y_ELSE = 48
 
 function getNodeHeight(type: EditorNodeType): number {
-  return type === 'approval' ? 68 : 52
+  return type === 'approval' || type === 'condition' ? 68 : 52
 }
 
 // Convert Screen coordinates to Canvas internal coordinates (accounting for pan & zoom)
@@ -73,7 +83,7 @@ const handleCanvasDrop = (e: DragEvent) => {
       const h = getNodeHeight(data.type as EditorNodeType)
       // Center node on drop
       editorStore.addNode(data.type as EditorNodeType, {
-        x: Math.round(pos.x - NODE_WIDTH / 2),
+        x: Math.round(pos.x - getNodeWidth(data.type as EditorNodeType) / 2),
         y: Math.round(pos.y - h / 2),
       })
     }
@@ -163,11 +173,15 @@ const hasApprovalBranchEdge = (nodeId: string, branch: 'approved' | 'rejected'):
   return editorStore.edges.some((e) => e.fromNodeId === nodeId && isApprovalBranchEdge(e, branch))
 }
 
-const handlePortMouseDown = (e: MouseEvent, sourceNodeId: string, branch?: 'approved' | 'rejected') => {
+const handlePortMouseDown = (
+  e: MouseEvent,
+  sourceNodeId: string,
+  branch?: 'approved' | 'rejected' | 'condition' | 'else'
+) => {
   e.stopPropagation()
 
   // Chặn không cho kéo thêm nếu cổng approval này đã có 1 đường nối ra
-  if (branch && hasApprovalBranchEdge(sourceNodeId, branch)) {
+  if (branch && (branch === 'approved' || branch === 'rejected') && hasApprovalBranchEdge(sourceNodeId, branch)) {
     const branchLabel = branch === 'approved' ? 'Phê duyệt (Approved)' : 'Từ chối (Rejected)'
     editorStore.showToast(`Đầu ra "${branchLabel}" đã có đường nối. Mỗi đầu ra chỉ được kéo 1 điều kiện.`, 'error')
     return
@@ -207,6 +221,24 @@ const handlePortMouseUp = (e: MouseEvent, targetNodeId: string) => {
           'CUSTOM',
           'rejected'
         )
+      } else if (edgeSourceBranch.value === 'else') {
+        editorStore.addEdge(
+          edgeSourceNodeId.value,
+          targetNodeId,
+          'ELSE',
+          [{ fieldKey: 'fallback', operator: 'EQUALS', compareValue: 'ELSE', dataType: 'STRING' }],
+          'CUSTOM',
+          'default'
+        )
+      } else if (edgeSourceBranch.value === 'condition') {
+        editorStore.addEdge(
+          edgeSourceNodeId.value,
+          targetNodeId,
+          'Nhánh điều kiện',
+          [],
+          'ALWAYS',
+          'condition'
+        )
       } else {
         editorStore.addEdge(edgeSourceNodeId.value, targetNodeId, 'Chuyển tiếp')
       }
@@ -220,12 +252,16 @@ const handlePortMouseUp = (e: MouseEvent, targetNodeId: string) => {
   }
 }
 
-const handleOutputPortMouseUp = (e: MouseEvent, sourceNodeId: string, branch?: 'approved' | 'rejected') => {
+const handleOutputPortMouseUp = (
+  e: MouseEvent,
+  sourceNodeId: string,
+  branch?: 'approved' | 'rejected' | 'condition' | 'else'
+) => {
   e.stopPropagation()
   if (isReconnectingEdge.value && reconnectingEdgeId.value && reconnectMode.value === 'source') {
     if (reconnectFixedNodeId.value !== sourceNodeId) {
       const sourceNode = editorStore.nodes.find((n) => n.id === sourceNodeId)
-      if (sourceNode?.type === 'approval' && branch) {
+      if (sourceNode?.type === 'approval' && (branch === 'approved' || branch === 'rejected')) {
         const branchExists = editorStore.edges.some(
           (edge) =>
             edge.id !== reconnectingEdgeId.value &&
@@ -268,6 +304,24 @@ const handleNodeMouseUp = (e: MouseEvent, node: WorkflowEditorNode) => {
           [{ fieldKey: 'action', operator: 'EQUALS', compareValue: 'REJECTED', dataType: 'STRING', logicOp: 'AND' }],
           'CUSTOM',
           'rejected'
+        )
+      } else if (edgeSourceBranch.value === 'else') {
+        editorStore.addEdge(
+          edgeSourceNodeId.value,
+          node.id,
+          'ELSE',
+          [{ fieldKey: 'fallback', operator: 'EQUALS', compareValue: 'ELSE', dataType: 'STRING' }],
+          'CUSTOM',
+          'default'
+        )
+      } else if (edgeSourceBranch.value === 'condition') {
+        editorStore.addEdge(
+          edgeSourceNodeId.value,
+          node.id,
+          'Nhánh điều kiện',
+          [],
+          'ALWAYS',
+          'condition'
         )
       } else {
         editorStore.addEdge(edgeSourceNodeId.value, node.id, 'Chuyển tiếp')
@@ -428,14 +482,26 @@ const computedEdges = computed<EdgePathData[]>(() => {
       (edge.label?.toLowerCase().includes('từ chối') ?? false) ||
       (edge.conditions?.some((c) => c.compareValue === 'REJECTED') ?? false)
 
+    const isElse =
+      edge.branchType === 'else' ||
+      edge.branchType === 'default' ||
+      (edge.label?.trim().toUpperCase() === 'ELSE') ||
+      (edge.conditions?.some((c) => c.compareValue === 'ELSE') ?? false)
+
     // Source port (Right side of source node)
-    const sx = fromNode.position.x + NODE_WIDTH
+    const sx = fromNode.position.x + getNodeWidth(fromNode.type)
     let sy = fromNode.position.y + fromH / 2
     if (fromNode.type === 'approval') {
       if (isApproved) {
         sy = fromNode.position.y + PORT_APPROVAL_Y_APPROVED
       } else if (isRejected) {
         sy = fromNode.position.y + PORT_APPROVAL_Y_REJECTED
+      }
+    } else if (fromNode.type === 'condition') {
+      if (isElse) {
+        sy = fromNode.position.y + PORT_CONDITION_Y_ELSE
+      } else {
+        sy = fromNode.position.y + PORT_CONDITION_Y_IF
       }
     }
 
@@ -480,13 +546,19 @@ const liveDrawingPath = computed(() => {
   const sourceNode = editorStore.nodes.find((n) => n.id === edgeSourceNodeId.value)
   if (!sourceNode) return ''
 
-  const sx = sourceNode.position.x + NODE_WIDTH
+  const sx = sourceNode.position.x + getNodeWidth(sourceNode.type)
   let sy = sourceNode.position.y + getNodeHeight(sourceNode.type) / 2
   if (sourceNode.type === 'approval') {
     if (edgeSourceBranch.value === 'approved') {
       sy = sourceNode.position.y + PORT_APPROVAL_Y_APPROVED
     } else if (edgeSourceBranch.value === 'rejected') {
       sy = sourceNode.position.y + PORT_APPROVAL_Y_REJECTED
+    }
+  } else if (sourceNode.type === 'condition') {
+    if (edgeSourceBranch.value === 'else') {
+      sy = sourceNode.position.y + PORT_CONDITION_Y_ELSE
+    } else {
+      sy = sourceNode.position.y + PORT_CONDITION_Y_IF
     }
   }
 
@@ -517,7 +589,7 @@ const liveReconnectingPath = computed(() => {
     const isApp = edgeObj?.branchType === 'approved' || (edgeObj?.label?.toLowerCase().includes('approv') ?? false)
     const isRej = edgeObj?.branchType === 'rejected' || (edgeObj?.label?.toLowerCase().includes('reject') ?? false)
 
-    sx = fixedNode.position.x + NODE_WIDTH
+    sx = fixedNode.position.x + getNodeWidth(fixedNode.type)
     if (fixedNode.type === 'approval') {
       sy = fixedNode.position.y + (isApp ? PORT_APPROVAL_Y_APPROVED : isRej ? PORT_APPROVAL_Y_REJECTED : 34)
     } else {
@@ -780,12 +852,13 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
             node.type,
             {
               selected: editorStore.selectedNodeId === node.id,
+              'is-branching-card': isBranchingNode(node.type),
             },
           ]"
           :style="{
             left: `${node.position.x}px`,
             top: `${node.position.y}px`,
-            width: `${NODE_WIDTH}px`,
+            width: `${getNodeWidth(node.type)}px`,
             height: `${getNodeHeight(node.type)}px`,
             '--node-accent': getNodeTypeMeta(node.type).color,
             '--node-bg': getNodeTypeMeta(node.type).bg,
@@ -811,7 +884,7 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
               <span>{{ getNodeTypeMeta(node.type).icon }}</span>
             </div>
 
-            <div class="node-info-col">
+            <div v-if="!isBranchingNode(node.type)" class="node-info-col">
               <span
                 class="node-card-label"
                 :title="node.name || getNodeTypeMeta(node.type).label || node.type"
@@ -854,6 +927,29 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
               @mouseup="handleOutputPortMouseUp($event, node.id, 'rejected')"
             >
               <div class="port-dot dot-rejected"></div>
+            </div>
+          </template>
+
+          <!-- SPECIAL FOR CONDITION: 2 Output Ports (Condition Branch & ELSE Fallback) -->
+          <template v-else-if="node.type === 'condition'">
+            <!-- Top Output Port: Nhánh điều kiện -->
+            <div
+              class="port-handle port-condition-head port-if-head"
+              title="Nhánh điều kiện"
+              @mousedown="handlePortMouseDown($event, node.id, 'condition')"
+              @mouseup="handleOutputPortMouseUp($event, node.id, 'condition')"
+            >
+              <div class="port-dot dot-condition-if"></div>
+            </div>
+
+            <!-- Bottom Output Port: ELSE (Fallback) -->
+            <div
+              class="port-handle port-condition-head port-else-head"
+              title="Port dưới: ELSE (Fallback xử lý khi không có điều kiện nào thỏa mãn)"
+              @mousedown="handlePortMouseDown($event, node.id, 'else')"
+              @mouseup="handleOutputPortMouseUp($event, node.id, 'else')"
+            >
+              <div class="port-dot dot-condition-else"></div>
             </div>
           </template>
 
@@ -1154,6 +1250,19 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
   box-shadow: 0 0 0 2.5px var(--node-accent), 0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
+.workflow-node-card.is-branching-card .node-body {
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.workflow-node-card.is-branching-card .node-icon-box {
+  margin: 0 auto;
+}
+
 .node-accent-bar {
   height: 3px;
   background: var(--node-accent);
@@ -1300,6 +1409,51 @@ function getApprovalNodeSubtitle(node: WorkflowEditorNode): string {
 .port-approval-head.is-connected:hover .dot-rejected {
   transform: scale(1.1);
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+}
+
+/* Ports for Condition Node (Top: Nhánh điều kiện, Bottom: ELSE) */
+.port-condition-head {
+  position: absolute;
+  right: -11px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: crosshair;
+  z-index: 10;
+}
+
+.port-if-head {
+  top: 20px;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+.port-else-head {
+  top: 48px;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+.port-dot.dot-condition-if {
+  border-color: #ec4899;
+  background: #ffffff;
+}
+
+.port-condition-head:hover .dot-condition-if {
+  background: #ec4899;
+  transform: scale(1.35);
+}
+
+.port-dot.dot-condition-else {
+  border-color: #f59e0b;
+  background: #ffffff;
+}
+
+.port-condition-head:hover .dot-condition-else {
+  background: #f59e0b;
+  transform: scale(1.35);
 }
 
 .port-dot {
