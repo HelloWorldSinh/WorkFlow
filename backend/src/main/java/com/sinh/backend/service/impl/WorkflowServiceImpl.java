@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -332,7 +333,26 @@ public class WorkflowServiceImpl implements WorkflowService {
             }
         }
 
-        // 4. Lưu danh sách Transitions (Đường nối)
+        // 4. Kiểm tra nguyên tắc luồng: Tất cả các node (trừ CONDITION & PARALLEL) chỉ được có tối đa 1 luồng đầu ra
+        if (request.getEdges() != null && request.getNodes() != null) {
+            Map<String, Long> outgoingCounts = request.getEdges().stream()
+                    .filter(e -> e.getFromNodeId() != null)
+                    .collect(Collectors.groupingBy(SaveWorkflowGraphRequest.EdgeDTO::getFromNodeId, Collectors.counting()));
+
+            for (SaveWorkflowGraphRequest.NodeDTO nodeDTO : request.getNodes()) {
+                NodeType type = parseNodeType(nodeDTO.getType());
+                String rawType = nodeDTO.getType() != null ? nodeDTO.getType().trim().toLowerCase() : "";
+                if (!"condition".equals(rawType) && !"parallel".equals(rawType) && type != NodeType.End) {
+                    long count = outgoingCounts.getOrDefault(nodeDTO.getId(), 0L);
+                    if (count > 1) {
+                        throw new IllegalArgumentException("Bước '" + (nodeDTO.getName() != null ? nodeDTO.getName() : nodeDTO.getId())
+                                + "' chỉ được phép có 1 luồng đầu ra. Hãy dùng bước Rẽ Nhánh (Condition/Parallel) nếu muốn rẽ luồng.");
+                    }
+                }
+            }
+        }
+
+        // 5. Lưu danh sách Transitions (Đường nối)
         if (request.getEdges() != null) {
             for (SaveWorkflowGraphRequest.EdgeDTO edgeDTO : request.getEdges()) {
                 Node sourceNode = createdNodeMap.get(edgeDTO.getFromNodeId());

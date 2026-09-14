@@ -180,6 +180,19 @@ const handlePortMouseDown = (
 ) => {
   e.stopPropagation()
 
+  // Chặn kéo thêm nếu node này đã có 1 luồng đầu ra (ngoại trừ condition và parallel)
+  const sourceNode = editorStore.nodes.find((n) => n.id === sourceNodeId)
+  if (sourceNode && sourceNode.type !== 'condition' && sourceNode.type !== 'parallel') {
+    const outgoingCount = editorStore.edges.filter((e) => e.fromNodeId === sourceNodeId).length
+    if (outgoingCount >= 1) {
+      editorStore.showToast(
+        `Bước "${sourceNode.name || sourceNode.type}" chỉ được phép có 1 luồng đầu ra. Hãy dùng Node Rẽ Nhánh (Condition / Parallel) nếu muốn chia nhiều nhánh.`,
+        'error'
+      )
+      return
+    }
+  }
+
   // Chặn không cho kéo thêm nếu cổng approval này đã có 1 đường nối ra
   if (branch && (branch === 'approved' || branch === 'rejected') && hasApprovalBranchEdge(sourceNodeId, branch)) {
     const branchLabel = branch === 'approved' ? 'Phê duyệt (Approved)' : 'Từ chối (Rejected)'

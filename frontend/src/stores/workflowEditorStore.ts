@@ -317,8 +317,20 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     const exists = edges.value.some((e) => e.fromNodeId === fromNodeId && e.toNodeId === toNodeId)
     if (exists) return
 
-    // Kiểm tra giới hạn: Node approval mỗi output (approved / rejected) chỉ được nối tối đa 1 điều kiện
+    // Kiểm tra giới hạn 1 đầu ra: Ngoại trừ node 'condition' và 'parallel', tất cả các node khác chỉ được có tối đa 1 luồng đầu ra
     const fromNode = nodes.value.find((n) => n.id === fromNodeId)
+    if (fromNode && fromNode.type !== 'condition' && fromNode.type !== 'parallel') {
+      const outgoingCount = edges.value.filter((e) => e.fromNodeId === fromNodeId).length
+      if (outgoingCount >= 1) {
+        showToast(
+          `Bước "${fromNode.name || fromNode.type}" chỉ được phép có 1 luồng đầu ra. Để rẽ nhánh, hãy dùng Node Rẽ Nhánh (Condition / Parallel).`,
+          'error'
+        )
+        return
+      }
+    }
+
+    // Kiểm tra giới hạn: Node approval mỗi output (approved / rejected) chỉ được nối tối đa 1 điều kiện
     if (fromNode && fromNode.type === 'approval' && (branchType === 'approved' || branchType === 'rejected')) {
       const branchExists = edges.value.some((e) => {
         if (e.fromNodeId !== fromNodeId) return false
