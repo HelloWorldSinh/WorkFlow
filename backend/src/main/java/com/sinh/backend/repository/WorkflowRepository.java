@@ -15,9 +15,9 @@ public interface WorkflowRepository extends JpaRepository<Workflow, Integer> {
     Optional<Workflow> findByIdAndDeletedAtIsNull(Integer id);
 
     @Query("SELECT w FROM Workflow w WHERE w.deletedAt IS NULL " +
-           "AND (:keyword IS NULL OR LOWER(w.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(w.description) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR CAST(w.id AS string) LIKE CONCAT('%', :keyword, '%')) " +
+           "AND (CAST(:keyword AS string) IS NULL OR LOWER(w.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "OR LOWER(w.description) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "OR CAST(w.id AS string) LIKE CONCAT('%', CAST(:keyword AS string), '%')) " +
            "AND (:status IS NULL OR w.status = :status) " +
            "AND (:ownerId IS NULL OR w.owner.id = :ownerId)")
     Page<Workflow> searchWorkflows(
@@ -29,9 +29,9 @@ public interface WorkflowRepository extends JpaRepository<Workflow, Integer> {
 
     @Query("SELECT w FROM Workflow w WHERE " +
            "(:includeDeleted = true OR w.deletedAt IS NULL) " +
-           "AND (:keyword IS NULL OR LOWER(w.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(w.description) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR CAST(w.id AS string) LIKE CONCAT('%', :keyword, '%')) " +
+           "AND (CAST(:keyword AS string) IS NULL OR LOWER(w.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "OR LOWER(w.description) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "OR CAST(w.id AS string) LIKE CONCAT('%', CAST(:keyword AS string), '%')) " +
            "AND (:status IS NULL OR w.status = :status) " +
            "AND (:ownerId IS NULL OR w.owner.id = :ownerId)")
     Page<Workflow> searchAllWorkflows(

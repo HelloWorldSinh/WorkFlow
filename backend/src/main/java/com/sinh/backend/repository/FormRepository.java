@@ -28,7 +28,7 @@ public interface FormRepository extends JpaRepository<Form, Integer> {
                      "LEFT JOIN FETCH f.fields " +
                      "LEFT JOIN FETCH f.createdBy " +
                      "WHERE f.isActive = true " +
-                     "AND (LOWER(f.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(f.description) LIKE LOWER(CONCAT('%', :keyword, '%'))) "
+                     "AND (LOWER(f.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR LOWER(f.description) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) "
                      +
                      "ORDER BY f.createdAt DESC")
        List<Form> searchActiveFormsWithFields(@Param("keyword") String keyword);

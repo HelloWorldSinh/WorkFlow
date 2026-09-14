@@ -28,9 +28,9 @@ public interface WorkflowInstanceRepository extends JpaRepository<WorkflowInstan
            "WHERE (:status IS NULL OR wi.status = :status) " +
            "AND (:workflowId IS NULL OR w.id = :workflowId) " +
            "AND (:creatorId IS NULL OR c.id = :creatorId) " +
-           "AND (:keyword IS NULL OR LOWER(wi.requestCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "     OR LOWER(w.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "     OR LOWER(c.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+           "AND (CAST(:keyword AS string) IS NULL OR LOWER(wi.requestCode) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "     OR LOWER(w.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "     OR LOWER(c.fullName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))) " +
            "ORDER BY wi.id DESC")
     Page<WorkflowInstance> searchInstances(
             @Param("keyword") String keyword,
