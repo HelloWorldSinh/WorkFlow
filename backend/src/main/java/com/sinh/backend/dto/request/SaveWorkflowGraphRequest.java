@@ -53,6 +53,7 @@ public class SaveWorkflowGraphRequest {
         private String fromNodeId;
         private String toNodeId;
         private String label;
+        private Integer priority;
         private String conditionExpression;
         private String matchType;
         private Object conditions;

@@ -5,6 +5,9 @@ export type EditorNodeType =
   | 'assignment'
   | 'notification'
   | 'system_action'
+  | 'condition'
+  | 'parallel'
+  | 'join'
   | 'end'
 
 export interface EditorNodePosition {
@@ -79,6 +82,19 @@ export interface EndConfig {
   closingNote?: string
 }
 
+export interface ConditionConfig {
+  defaultBranch?: string
+}
+
+export interface ParallelConfig {
+  joinMode?: 'all' | 'any'
+}
+
+export interface JoinConfig {
+  joinStrategy?: 'wait_all' | 'first_come' | 'n_of_m'
+  requiredCount?: number
+}
+
 import type { NodeFormBinding } from './form'
 
 export interface WorkflowEditorNode {
@@ -95,7 +111,10 @@ export interface WorkflowEditorNode {
     NotificationConfig &
     SystemActionConfig &
     StartConfig &
-    EndConfig
+    EndConfig &
+    ConditionConfig &
+    ParallelConfig &
+    JoinConfig
   >
 }
 
@@ -126,8 +145,9 @@ export interface WorkflowEditorEdge {
   fromNodeId: string
   toNodeId: string
   label?: string
+  priority?: number
   conditionExpression?: string
   matchType?: ConditionMatchType
   conditions?: TransitionRule[]
-  branchType?: 'approved' | 'rejected' | 'default'
+  branchType?: 'approved' | 'rejected' | 'condition' | 'else' | 'default'
 }

@@ -71,6 +71,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   const nodePalette = [
     {
       type: 'start' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Start',
       title: 'Bắt đầu',
       icon: '▶',
@@ -80,6 +81,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'approval' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Approval',
       title: 'Phê duyệt',
       icon: '✓',
@@ -89,6 +91,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'review' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Review',
       title: 'Soát xét',
       icon: '👁',
@@ -98,6 +101,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'assignment' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Assignment',
       title: 'Phân việc',
       icon: '👤',
@@ -107,6 +111,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'notification' as EditorNodeType,
+      category: 'functional' as const,
       label: 'Notification',
       title: 'Thông báo',
       icon: '🔔',
@@ -116,6 +121,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'system_action' as EditorNodeType,
+      category: 'functional' as const,
       label: 'System Action',
       title: 'Tác vụ hệ thống',
       icon: '⚡',
@@ -125,12 +131,43 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     },
     {
       type: 'end' as EditorNodeType,
+      category: 'functional' as const,
       label: 'End',
       title: 'Kết thúc',
       icon: '⏹',
       color: '#ef4444',
       bg: '#fef2f2',
       desc: 'Điểm kết thúc quy trình',
+    },
+    {
+      type: 'condition' as EditorNodeType,
+      category: 'branching' as const,
+      label: 'Condition',
+      title: 'Rẽ nhánh điều kiện',
+      icon: '🔀',
+      color: '#ec4899',
+      bg: '#fdf2f8',
+      desc: 'Rẽ nhánh theo điều kiện (If/Else)',
+    },
+    {
+      type: 'parallel' as EditorNodeType,
+      category: 'branching' as const,
+      label: 'Parallel',
+      title: 'Rẽ nhánh song song',
+      icon: '║',
+      color: '#0284c7',
+      bg: '#f0f9ff',
+      desc: 'Thực hiện song song nhiều luồng',
+    },
+    {
+      type: 'join' as EditorNodeType,
+      category: 'branching' as const,
+      label: 'Join',
+      title: 'Hợp luồng song song',
+      icon: '⇶',
+      color: '#0d9488',
+      bg: '#ccfbf1',
+      desc: 'Gộp các luồng song song về 1 điểm (Wait All)',
     },
   ]
 
@@ -203,6 +240,14 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
           httpMethod: 'POST' as const,
           endpointUrl: 'https://api.company.com/webhook',
         }
+      case 'condition':
+        return {}
+      case 'parallel':
+        return {}
+      case 'join':
+        return {
+          joinStrategy: 'wait_all' as const,
+        }
       case 'start':
         return {
           triggerType: 'form_submission' as const,
@@ -260,7 +305,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     label: string = '',
     conditions: TransitionRule[] = [],
     matchType: ConditionMatchType = 'ALWAYS',
-    branchType?: 'approved' | 'rejected' | 'default'
+    branchType?: 'approved' | 'rejected' | 'condition' | 'else' | 'default'
   ) {
     if (fromNodeId === toNodeId) return
 
@@ -268,8 +313,20 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     const exists = edges.value.some((e) => e.fromNodeId === fromNodeId && e.toNodeId === toNodeId)
     if (exists) return
 
-    // Kiểm tra giới hạn: Node approval mỗi output (approved / rejected) chỉ được nối tối đa 1 điều kiện
+    // Kiểm tra giới hạn 1 đầu ra: Ngoại trừ node 'condition' và 'parallel', tất cả các node khác chỉ được có tối đa 1 luồng đầu ra
     const fromNode = nodes.value.find((n) => n.id === fromNodeId)
+    if (fromNode && fromNode.type !== 'condition' && fromNode.type !== 'parallel') {
+      const outgoingCount = edges.value.filter((e) => e.fromNodeId === fromNodeId).length
+      if (outgoingCount >= 1) {
+        showToast(
+          `Bước "${fromNode.name || fromNode.type}" chỉ được phép có 1 luồng đầu ra. Để rẽ nhánh, hãy dùng Node Rẽ Nhánh (Condition / Parallel).`,
+          'error'
+        )
+        return
+      }
+    }
+
+    // Kiểm tra giới hạn: Node approval mỗi output (approved / rejected) chỉ được nối tối đa 1 điều kiện
     if (fromNode && fromNode.type === 'approval' && (branchType === 'approved' || branchType === 'rejected')) {
       const branchExists = edges.value.some((e) => {
         if (e.fromNodeId !== fromNodeId) return false
@@ -292,6 +349,21 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
       if (branchExists) {
         showToast(
           `Đầu ra "${branchType === 'approved' ? 'Phê duyệt' : 'Từ chối'}" đã có đường nối! Mỗi đầu ra chỉ được kéo 1 điều kiện.`,
+          'error'
+        )
+        return
+      }
+    }
+
+    // Kiểm tra giới hạn nhánh Mặc định (ELSE / Fallback): Mỗi node chỉ được tối đa 1 nhánh ELSE
+    const isElse = branchType === 'else' || branchType === 'default' || label?.trim() === 'ELSE'
+    if (isElse) {
+      const hasElseEdge = edges.value.some(
+        (e) => e.fromNodeId === fromNodeId && (e.branchType === 'else' || e.branchType === 'default' || e.label?.trim() === 'ELSE')
+      )
+      if (hasElseEdge) {
+        showToast(
+          `Bước "${fromNode?.name || fromNodeId}" đã có 1 nhánh mặc định (ELSE / Fallback). Mỗi bước chỉ được phép có tối đa 1 nhánh Mặc định.`,
           'error'
         )
         return
@@ -331,6 +403,32 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   function updateEdge(id: string, updates: Partial<WorkflowEditorEdge>) {
     const edge = edges.value.find((e) => e.id === id)
     if (edge) {
+      const nextFromNodeId = updates.fromNodeId ?? edge.fromNodeId
+      const nextBranchType = updates.branchType ?? edge.branchType
+      const nextLabel = updates.label ?? edge.label
+
+      const willBeElse =
+        nextBranchType === 'else' ||
+        nextBranchType === 'default' ||
+        nextLabel?.trim() === 'ELSE'
+
+      if (willBeElse) {
+        const hasOtherElse = edges.value.some(
+          (e) =>
+            e.id !== id &&
+            e.fromNodeId === nextFromNodeId &&
+            (e.branchType === 'else' || e.branchType === 'default' || e.label?.trim() === 'ELSE')
+        )
+        if (hasOtherElse) {
+          const fromNode = nodes.value.find((n) => n.id === nextFromNodeId)
+          showToast(
+            `Bước "${fromNode?.name || nextFromNodeId}" đã có 1 nhánh mặc định (ELSE / Fallback). Không thể tạo thêm nhánh mặc định thứ 2.`,
+            'error'
+          )
+          return
+        }
+      }
+
       Object.assign(edge, updates)
       isDirty.value = true
     }

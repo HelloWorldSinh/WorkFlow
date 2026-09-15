@@ -41,6 +41,7 @@ const nodeTypeMeta = computed(() => {
   return (
     editorStore.nodePalette.find((p) => p.type === node.value?.type) || {
       title: node.value?.type,
+      icon: '⚡',
       color: '#6366f1',
       bg: '#eef2ff',
     }
@@ -172,196 +173,116 @@ const toggleInAppChannel = (e: Event) => {
 }
 
 // ==========================================================
-// TRANSITION CONDITION BUILDER LOGIC
+// ==========================================================
+// TRANSITION CONDITION EXPRESSION LOGIC
 // ==========================================================
 
-const fromNode = computed(() => {
-  if (!edge.value?.fromNodeId) return null
-  return editorStore.nodes.find((n) => n.id === edge.value?.fromNodeId) || null
-})
-
-const startNode = computed(() => {
-  return editorStore.nodes.find((n) => n.type === 'start') || null
-})
-
-export interface ConditionFieldOption {
-  key: string
-  label: string
-  type: string
-  dataType: ConditionDataType
-  sourceGroup: string
-  options?: { label: string; value: string }[]
+export interface SyntaxResult {
+  valid: boolean
+  error?: string
 }
 
-const availableConditionFields = computed<ConditionFieldOption[]>(() => {
-  const list: ConditionFieldOption[] = []
+const validateExpressionSyntax = (expr: string): SyntaxResult => {
+  if (!expr || !expr.trim()) return { valid: true }
+  const s = expr.trim()
 
-  // 1. Fields from bound form (source node or start node)
-  const targetFormId = fromNode.value?.formBinding?.formId || startNode.value?.formBinding?.formId
-  if (targetFormId) {
-    const form = formStore.getFormById(targetFormId)
-    if (form && form.schema && Array.isArray(form.schema.fields)) {
-      form.schema.fields.forEach((f) => {
-        let dt: ConditionDataType = 'STRING'
-        if (f.type === 'number') dt = 'NUMBER'
-        else if (f.type === 'date') dt = 'DATE'
-        else if (f.type === 'checkbox') dt = 'BOOLEAN'
-
-        list.push({
-          key: f.key,
-          label: `${f.label} (${f.key})`,
-          type: f.type,
-          dataType: dt,
-          sourceGroup: `Biểu mẫu: ${form.name}`,
-          options: f.options,
-        })
-      })
+  // 1. Check parenthetical balance
+  let depth = 0
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '(') depth++
+    else if (s[i] === ')') {
+      depth--
+      if (depth < 0) return { valid: false, error: 'Thừa dấu ngoặc đóng \')\'' }
     }
   }
+  if (depth > 0) return { valid: false, error: 'Thiếu dấu ngoặc đóng \')\'' }
 
-  // 2. Approval Action output (if from approval / review node)
-  if (fromNode.value?.type === 'approval' || fromNode.value?.type === 'review') {
-    list.push({
-      key: 'action',
-      label: 'Quyết định phê duyệt (Action)',
-      type: 'select',
-      dataType: 'STRING',
-      sourceGroup: 'Kết quả bước duyệt',
-      options: [
-        { label: 'Đồng ý / Chấp thuận (APPROVED)', value: 'APPROVED' },
-        { label: 'Từ chối (REJECTED)', value: 'REJECTED' },
-      ],
-    })
-  }
-
-  // 3. Biến quy trình độc lập (Data Contract - Cho phép định nghĩa trước khi Match Form)
-  list.push(
-    {
-      key: 'amount',
-      label: 'Tổng kinh phí / Số tiền (amount)',
-      type: 'number',
-      dataType: 'NUMBER',
-      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
-    },
-    {
-      key: 'expense_type',
-      label: 'Loại chi phí (expense_type)',
-      type: 'select',
-      dataType: 'STRING',
-      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
-      options: [
-        { label: 'Thiết bị IT', value: 'it_hardware' },
-        { label: 'Văn phòng phẩm', value: 'stationery' },
-        { label: 'Công tác phí', value: 'travel' },
-        { label: 'Đào tạo', value: 'training' },
-        { label: 'Khác', value: 'other' },
-      ],
-    },
-    {
-      key: 'leave_days',
-      label: 'Số ngày nghỉ phép (leave_days)',
-      type: 'number',
-      dataType: 'NUMBER',
-      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
-    },
-    {
-      key: 'urgent_flag',
-      label: 'Đơn khẩn cấp (urgent_flag)',
-      type: 'checkbox',
-      dataType: 'BOOLEAN',
-      sourceGroup: 'Biến quy trình độc lập (Data Contract)',
-      options: [
-        { label: 'Khẩn cấp (true)', value: 'true' },
-        { label: 'Bình thường (false)', value: 'false' },
-      ],
-    }
-  )
-
-  // 4. Common ticket system variables
-  list.push(
-    {
-      key: 'ticket_priority',
-      label: 'Mức độ ưu tiên (Priority)',
-      type: 'select',
-      dataType: 'STRING',
-      sourceGroup: 'Thông tin Hệ thống',
-      options: [
-        { label: 'Khẩn cấp (urgent)', value: 'urgent' },
-        { label: 'Cao (high)', value: 'high' },
-        { label: 'Bình thường (medium)', value: 'medium' },
-        { label: 'Thấp (low)', value: 'low' },
-      ],
-    },
-    {
-      key: 'department',
-      label: 'Phòng ban người gửi (Department)',
-      type: 'text',
-      dataType: 'STRING',
-      sourceGroup: 'Thông tin Hệ thống',
-    }
-  )
-
-  // 5. Thêm các biến tùy chỉnh người dùng đã nhập trên Edge (nếu có)
-  if (edge.value?.conditions) {
-    edge.value.conditions.forEach((r) => {
-      if (r.fieldKey && !list.some((item) => item.key === r.fieldKey)) {
-        list.push({
-          key: r.fieldKey,
-          label: `Biến tùy chỉnh: ${r.fieldKey}`,
-          type: r.dataType === 'NUMBER' ? 'number' : 'text',
-          dataType: r.dataType || 'STRING',
-          sourceGroup: 'Biến quy trình tùy chỉnh',
-        })
+  // 2. Check quote balance
+  let inQuote = false
+  let quoteChar = ''
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if ((c === '"' || c === "'") && (i === 0 || s[i - 1] !== '\\')) {
+      if (!inQuote) {
+        inQuote = true
+        quoteChar = c
+      } else if (c === quoteChar) {
+        inQuote = false
       }
-    })
-  }
-
-  return list
-})
-
-const groupedConditionFields = computed(() => {
-  const groups: { sourceGroup: string; fields: ConditionFieldOption[] }[] = []
-  for (const f of availableConditionFields.value) {
-    let grp = groups.find((g) => g.sourceGroup === f.sourceGroup)
-    if (!grp) {
-      grp = { sourceGroup: f.sourceGroup, fields: [] }
-      groups.push(grp)
     }
-    grp.fields.push(f)
   }
-  return groups
-})
+  if (inQuote) return { valid: false, error: `Thiếu dấu đóng chuỗi (${quoteChar})` }
 
-const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] = [
-  { value: 'EQUALS', label: '=' },
-  { value: 'NOT_EQUALS', label: '≠' },
-  { value: 'GREATER_THAN', label: '>' },
-  { value: 'GREATER_THAN_OR_EQUAL', label: '≥' },
-  { value: 'LESS_THAN', label: '<' },
-  { value: 'LESS_THAN_OR_EQUAL', label: '≤' },
-  { value: 'CONTAINS', label: 'CONTAINS' },
-]
-
-const ensureEdgeConditions = () => {
-  if (!edge.value) return
-  if (!edge.value.conditions) edge.value.conditions = []
-  if (edge.value.conditions.length > 0) {
-    edge.value.matchType = 'CUSTOM'
-  } else {
-    edge.value.matchType = 'ALWAYS'
+  // 3. Check for valid comparison operators
+  const OP_REGEX = /(==|!=|>=|<=|>|<|=|CONTAINS|contains)/i
+  if (!OP_REGEX.test(s)) {
+    return { valid: false, error: 'Thiếu toán tử so sánh (VD: ==, !=, >, <, CONTAINS)' }
   }
-  edge.value.conditions.forEach((r) => {
-    if (!r.logicOp) r.logicOp = 'AND'
-  })
+
+  // 4. Clause structure validation (split by &&, ||, AND, OR)
+  const clauses = s.split(/(&&|\|\||\bAND\b|\bOR\b)/i)
+  for (const rawClause of clauses) {
+    const clause = rawClause.trim().replace(/^[\(\)\s]+|[\(\)\s]+$/g, '')
+    if (!clause || /^(&&|\|\||AND|OR)$/i.test(clause)) continue
+
+    const match = clause.match(/^(.*?)\s*(==|!=|>=|<=|>|<|=|CONTAINS|contains)\s*(.*)$/i)
+    if (!match) {
+      return { valid: false, error: `Cú pháp không hợp lệ: "${clause}" (Cần dạng: trường toán-tử giá-trị)` }
+    }
+
+    const field = (match[1] || '').trim()
+    const op = match[2] || ''
+    const val = (match[3] || '').trim()
+
+    if (!field) {
+      return { valid: false, error: `Thiếu tên trường trước toán tử "${op}"` }
+    }
+    if (!val) {
+      return { valid: false, error: `Thiếu giá trị so sánh sau toán tử "${op}"` }
+    }
+    // Validate Value Literal / Field Reference format:
+    // 1. Quoted string: "..." or '...'
+    // 2. Number: 123 or 45.6
+    // 3. Boolean: true / false
+    // 4. Variable / Field reference: identifier like budget_limit or user.level
+    const isQuotedString = /^["'].*["']$/.test(val)
+    const isNumber = /^-?\d+(\.\d+)?$/.test(val)
+    const isBoolean = /^(true|false)$/i.test(val)
+    const isFieldRef = /^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(val)
+
+    if (!isQuotedString && !isNumber && !isBoolean && !isFieldRef) {
+      return {
+        valid: false,
+        error: `Giá trị so sánh "${val}" không hợp lệ (Phải là hằng số, chuỗi bọc trong nháy, hoặc tên biến)`,
+      }
+    }
+  }
+
+  return { valid: true }
 }
 
-watch(
-  () => edge.value?.id,
-  () => {
-    ensureEdgeConditions()
-  },
-  { immediate: true }
-)
+const expressionValidation = computed(() => {
+  if (!edge.value) return { valid: true }
+  return validateExpressionSyntax(edge.value.conditionExpression || '')
+})
+
+const insertOperatorToken = (token: string) => {
+  if (!edge.value) return
+  const current = edge.value.conditionExpression || ''
+  const space = current && !current.endsWith(' ') ? ' ' : ''
+  edge.value.conditionExpression = current + space + token
+  onExpressionChange()
+}
+
+const onExpressionChange = () => {
+  if (!edge.value) return
+  editorStore.isDirty = true
+  if (edge.value.conditionExpression && edge.value.conditionExpression.trim()) {
+    edge.value.label = edge.value.conditionExpression.trim()
+  } else {
+    edge.value.label = 'Mặc định'
+  }
+}
 
 // Auto track dirty changes when user modifies node or edge properties
 watch(
@@ -383,89 +304,6 @@ watch(
   },
   { deep: true }
 )
-
-const setRuleLogicOp = (rule: TransitionRule, op: 'AND' | 'OR') => {
-  rule.logicOp = op
-  editorStore.isDirty = true
-}
-
-const addConditionRule = (preferredLogicOp: 'AND' | 'OR' = 'AND') => {
-  if (!edge.value) return
-  if (!edge.value.conditions) edge.value.conditions = []
-  edge.value.matchType = 'CUSTOM'
-
-  const defaultField = availableConditionFields.value[0]
-  const defaultVal =
-    defaultField?.options && defaultField.options.length > 0
-      ? defaultField.options[0]?.value || ''
-      : ''
-
-  edge.value.conditions.push({
-    fieldKey: defaultField?.key || 'action',
-    operator: 'EQUALS',
-    compareValue: defaultVal,
-    dataType: defaultField?.dataType || 'STRING',
-    logicOp: preferredLogicOp,
-  })
-  editorStore.isDirty = true
-}
-
-const removeConditionRule = (index: number) => {
-  if (!edge.value?.conditions) return
-  edge.value.conditions.splice(index, 1)
-  if (edge.value.conditions.length === 0) {
-    edge.value.matchType = 'ALWAYS'
-  }
-  editorStore.isDirty = true
-}
-
-const getFieldMeta = (fieldKey: string): ConditionFieldOption | undefined => {
-  return availableConditionFields.value.find((f) => f.key === fieldKey)
-}
-
-const onRuleFieldChange = (rule: TransitionRule) => {
-  const meta = getFieldMeta(rule.fieldKey)
-  if (meta) {
-    rule.dataType = meta.dataType
-    if (meta.options && meta.options.length > 0) {
-      rule.compareValue = meta.options[0]?.value || ''
-    } else {
-      rule.compareValue = ''
-    }
-  }
-  editorStore.isDirty = true
-}
-
-const autoGenerateEdgeLabel = () => {
-  if (!edge.value) return
-  if (edge.value.matchType === 'ALWAYS' || !edge.value.conditions || edge.value.conditions.length === 0) {
-    edge.value.label = 'Mặc định'
-    return
-  }
-
-  let labelStr = ''
-  edge.value.conditions.forEach((r, idx) => {
-    const fieldName = r.fieldKey
-    let opSymbol = '='
-    if (r.operator === 'EQUALS') opSymbol = '='
-    else if (r.operator === 'NOT_EQUALS') opSymbol = '≠'
-    else if (r.operator === 'GREATER_THAN') opSymbol = '>'
-    else if (r.operator === 'GREATER_THAN_OR_EQUAL') opSymbol = '≥'
-    else if (r.operator === 'LESS_THAN') opSymbol = '<'
-    else if (r.operator === 'LESS_THAN_OR_EQUAL') opSymbol = '≤'
-    else if (r.operator === 'CONTAINS') opSymbol = 'contains'
-
-    const ruleText = `${fieldName} ${opSymbol} ${r.compareValue || '...'}`
-    if (idx === 0) {
-      labelStr = ruleText
-    } else {
-      const op = r.logicOp || (edge.value?.matchType === 'OR' ? 'OR' : 'AND')
-      labelStr += ` ${op} ${ruleText}`
-    }
-  })
-
-  edge.value.label = labelStr
-}
 </script>
 
 <template>
@@ -513,8 +351,21 @@ const autoGenerateEdgeLabel = () => {
            FORM FOR SELECTED NODE
            ========================================================== -->
       <div v-if="node" class="dynamic-form">
-        <!-- 1. Common Fields: Name & Description -->
-        <div class="form-section">
+        <!-- Gateway Info Box for Branching & Navigation Nodes -->
+        <div v-if="node.type === 'condition' || node.type === 'parallel' || node.type === 'join'" class="form-section gateway-info-section">
+          <div class="gateway-info-card">
+            <span class="gateway-card-icon" :style="{ color: nodeTypeMeta?.color }">
+              {{ nodeTypeMeta?.icon || '⚡' }}
+            </span>
+            <div class="gateway-card-content">
+              <strong>{{ nodeTypeMeta?.title }}</strong>
+              <p>Bước rẽ nhánh & điều hướng không cần cài đặt thông số. Bạn có thể nhấn nút <strong>Xóa Bước Này</strong> bên dưới để gỡ khỏi sơ đồ.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 1. Common Fields: Name & Description (for non-gateway nodes) -->
+        <div v-else class="form-section">
           <div class="section-title">Thông tin chung</div>
           
           <div class="form-group">
@@ -973,6 +824,7 @@ const autoGenerateEdgeLabel = () => {
             ></textarea>
           </div>
         </div>
+
       </div>
 
       <!-- ==========================================================
@@ -1009,186 +861,146 @@ const autoGenerateEdgeLabel = () => {
           </div>
 
 
-          <div class="form-group">
-            <label class="form-label">Nhãn hiển thị trên đường nối</label>
-            <input
-              v-model="edge.label"
-              type="text"
-              class="form-control"
-              placeholder="Ví dụ: Đồng ý, Từ chối, Giá trị > 10M..."
-            />
+          <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+              <label class="form-label">Nhãn đường nối</label>
+              <input
+                v-model="edge.label"
+                type="text"
+                class="form-control"
+                placeholder="Ví dụ: Đồng ý, Từ chối, >10M..."
+              />
+            </div>
+
+            <div class="form-group" style="flex: 1; min-width: 90px;">
+              <label class="form-label" title="Thứ tự ưu tiên xét điều kiện (1 = Kiểm tra đầu tiên)">Ưu tiên (#)</label>
+              <input
+                v-model.number="edge.priority"
+                type="number"
+                min="1"
+                max="999"
+                class="form-control text-center font-bold"
+                placeholder="1"
+                @change="editorStore.isDirty = true"
+              />
+            </div>
           </div>
 
-          <!-- TRANSITION CONDITIONS BUILDER -->
+          <!-- TRANSITION CONDITION EXPRESSION EDITOR -->
           <div class="form-section conditions-section">
             <div class="section-title-row">
-              <span class="section-title">Điều kiện rẽ nhánh</span>
-              <span v-if="edge.conditions && edge.conditions.length > 0" class="rules-badge">{{ edge.conditions.length }} điều kiện</span>
-            </div>
-
-            <!-- Khi chưa có điều kiện: hiển thị thông báo và nút thêm điều kiện mới -->
-            <div v-if="!edge.conditions || edge.conditions.length === 0" class="empty-conditions-box">
-              <span class="empty-conditions-text">Chưa thiết lập điều kiện nào (Mặc định đường nối luôn được đi qua)</span>
-              <button
-                type="button"
-                class="btn-add-condition-primary"
-                @click="addConditionRule('AND')"
+              <span class="section-title">Biểu thức điều kiện rẽ nhánh</span>
+              <span
+                class="rules-badge"
+                :class="expressionValidation.valid ? 'valid-badge' : 'invalid-badge'"
               >
-                + Thêm điều kiện mới
-              </button>
+                {{ expressionValidation.valid ? '✓ Biểu thức hợp lệ' : '⚠️ Lỗi cú pháp' }}
+              </span>
             </div>
 
-            <!-- Khi đã có điều kiện: hiển thị danh sách -->
-            <div v-else class="rules-container">
-              <div class="rules-list">
-                <template
-                  v-for="(rule, rIdx) in (edge.conditions || [])"
-                  :key="rIdx"
-                >
-                  <!-- Connector between rules -->
-                  <div v-if="rIdx > 0" class="rule-logic-connector">
-                    <div class="connector-line"></div>
-                    <div class="connector-pill">
-                      <button
-                        type="button"
-                        class="logic-op-btn"
-                        :class="{ active: rule.logicOp === 'AND' || !rule.logicOp }"
-                        @click="setRuleLogicOp(rule, 'AND')"
-                      >
-                        AND
-                      </button>
-                      <button
-                        type="button"
-                        class="logic-op-btn"
-                        :class="{ active: rule.logicOp === 'OR' }"
-                        @click="setRuleLogicOp(rule, 'OR')"
-                      >
-                        OR
-                      </button>
-                    </div>
-                    <div class="connector-line"></div>
-                  </div>
-
-                  <div class="rule-card">
-                    <div class="rule-card-top">
-                      <span class="rule-index">#{{ rIdx + 1 }}</span>
-                      <span class="rule-type-badge">{{ rule.dataType }}</span>
-                      <button
-                        type="button"
-                        class="btn-delete-rule"
-                        title="Xóa điều kiện này"
-                        @click="removeConditionRule(rIdx)"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    <!-- Field Selection -->
-                    <div class="rule-field-group">
-                      <div class="rule-field-header">
-                        <label class="rule-label">Trường dữ liệu kiểm tra</label>
-                        <span
-                          v-if="getFieldMeta(rule.fieldKey)?.sourceGroup"
-                          class="rule-source-badge"
-                          :title="'Nguồn: ' + getFieldMeta(rule.fieldKey)?.sourceGroup"
-                        >
-                          {{ getFieldMeta(rule.fieldKey)?.sourceGroup }}
-                        </span>
-                      </div>
-                      <select
-                        v-model="rule.fieldKey"
-                        class="form-control select-field"
-                        @change="onRuleFieldChange(rule)"
-                      >
-                        <optgroup
-                          v-for="group in groupedConditionFields"
-                          :key="group.sourceGroup"
-                          :label="group.sourceGroup"
-                        >
-                          <option
-                            v-for="f in group.fields"
-                            :key="f.key"
-                            :value="f.key"
-                          >
-                            {{ f.label || f.key }}
-                          </option>
-                        </optgroup>
-                      </select>
-                    </div>
-
-                    <!-- Operator & Value -->
-                    <div class="rule-row-compare">
-                      <div class="rule-op-col">
-                        <label class="rule-label">Toán tử</label>
-                        <select v-model="rule.operator" class="form-control select-op">
-                          <option
-                            v-for="op in CONDITION_OPERATORS"
-                            :key="op.value"
-                            :value="op.value"
-                          >
-                            {{ op.label }}
-                          </option>
-                        </select>
-                      </div>
-
-                      <div class="rule-val-col">
-                        <label class="rule-label">Giá trị so sánh</label>
-                        <!-- If dropdown select field -->
-                        <select
-                          v-if="getFieldMeta(rule.fieldKey)?.options?.length"
-                          v-model="rule.compareValue"
-                          class="form-control select-val"
-                        >
-                          <option
-                            v-for="opt in getFieldMeta(rule.fieldKey)?.options"
-                            :key="opt.value"
-                            :value="opt.value"
-                          >
-                            {{ opt.label }}
-                          </option>
-                        </select>
-
-                        <!-- If number -->
-                        <input
-                          v-else-if="getFieldMeta(rule.fieldKey)?.dataType === 'NUMBER'"
-                          v-model="rule.compareValue"
-                          type="number"
-                          class="form-control input-val"
-                          placeholder="Nhập số..."
-                        />
-
-                        <!-- If date -->
-                        <input
-                          v-else-if="getFieldMeta(rule.fieldKey)?.dataType === 'DATE'"
-                          v-model="rule.compareValue"
-                          type="date"
-                          class="form-control input-val"
-                        />
-
-                        <!-- Default text -->
-                        <input
-                          v-else
-                          v-model="rule.compareValue"
-                          type="text"
-                          class="form-control input-val"
-                          placeholder="Nhập giá trị..."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </template>
+            <div class="form-group">
+              <textarea
+                v-model="edge.conditionExpression"
+                rows="3"
+                class="form-control expr-textarea"
+                placeholder='Ví dụ: (department == "IT" && level > 3) || role == "ADMIN"'
+                @input="onExpressionChange"
+              ></textarea>
+              <div v-if="!expressionValidation.valid" class="expr-error-text">
+                {{ expressionValidation.error }}
               </div>
-
-              <!-- Button Add Single Rule -->
-              <button
-                type="button"
-                class="btn-add-rule-single"
-                @click="addConditionRule('AND')"
-              >
-                + Thêm điều kiện mới
-              </button>
             </div>
 
+            <!-- Quick Operator Helpers -->
+            <div class="expr-chips-section">
+              <span class="expr-chips-label">Chèn nhanh toán tử:</span>
+              <div class="expr-chips-group">
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('&&')"
+                  title="VÀ (AND)"
+                >
+                  &&
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('||')"
+                  title="HOẶC (OR)"
+                >
+                  ||
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('==')"
+                  title="BẰNG"
+                >
+                  ==
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('!=')"
+                  title="KHÁC"
+                >
+                  !=
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('>')"
+                  title="LỚN HƠN"
+                >
+                  &gt;
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('>=')"
+                  title="LỚN HƠN HOẶC BẰNG"
+                >
+                  &gt;=
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('<')"
+                  title="NHỎ HƠN"
+                >
+                  &lt;
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('<=')"
+                  title="NHỎ HƠN HOẶC BẰNG"
+                >
+                  &lt;=
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('CONTAINS')"
+                  title="CHỨA CHUỖI"
+                >
+                  CONTAINS
+                </button>
+                <button
+                  type="button"
+                  class="expr-chip-btn"
+                  @click="insertOperatorToken('( )')"
+                  title="NGOẶC ĐƠN"
+                >
+                  ( )
+                </button>
+              </div>
+            </div>
+
+            <span class="hint-text">
+              💡 Nhập biểu thức dạng logic đơn giản hoặc lồng nhau. Backend sẽ tự động phân tích thành cây JSON điều kiện và lưu trữ dữ liệu.
+            </span>
           </div>
         </div>
       </div>
@@ -2211,5 +2023,114 @@ const autoGenerateEdgeLabel = () => {
   color: #3730a3;
   display: block;
   margin-bottom: 2px;
+}
+
+/* Gateway info box */
+.gateway-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.gateway-card-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.gateway-card-content strong {
+  font-size: 0.875rem;
+  color: #1e293b;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.gateway-card-content p {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ==========================================================
+   EXPRESSION EDITOR STYLES
+   ========================================================== */
+.rules-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.rules-badge.valid-badge {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.rules-badge.invalid-badge {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.expr-textarea {
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  resize: vertical;
+}
+
+.expr-textarea:focus {
+  background: #ffffff;
+}
+
+.expr-error-text {
+  font-size: 0.72rem;
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+.expr-chips-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.expr-chips-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.expr-chips-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.expr-chip-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.expr-chip-btn:hover {
+  background: #6366f1;
+  color: #ffffff;
+  border-color: #4f46e5;
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.25);
 }
 </style>

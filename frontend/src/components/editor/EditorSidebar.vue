@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useWorkflowEditorStore } from '@/stores/workflowEditorStore'
 import type { EditorNodeType } from '@/types/editor'
 
@@ -16,6 +16,15 @@ const handleDragStart = (event: DragEvent, type: EditorNodeType) => {
 const handleAddNode = (type: EditorNodeType) => {
   editorStore.addNode(type)
 }
+
+// Phân loại Node theo 2 nhóm chính: Chức năng & Rẽ nhánh
+const functionalNodes = computed(() =>
+  editorStore.nodePalette.filter((n) => n.category === 'functional')
+)
+
+const branchingNodes = computed(() =>
+  editorStore.nodePalette.filter((n) => n.category === 'branching')
+)
 </script>
 
 <template>
@@ -55,37 +64,91 @@ const handleAddNode = (type: EditorNodeType) => {
       </button>
     </div>
 
-    <!-- NODE PALETTE LIST -->
+    <!-- NODE PALETTE LIST (CATEGORIZED SECTIONS) -->
     <div class="sidebar-node-list">
-      <div
-        v-for="item in editorStore.nodePalette"
-        :key="item.type"
-        class="palette-node-item"
-        :style="{ '--palette-color': item.color, '--palette-bg': item.bg }"
-        draggable="true"
-        :title="`${item.label.toUpperCase()} - Bấm hoặc kéo thả vào Canvas`"
-        @click="handleAddNode(item.type)"
-        @dragstart="handleDragStart($event, item.type)"
-      >
-        <!-- Drag Grip Handle -->
-        <div v-if="!isCollapsed" class="node-grip-handle" title="Kéo thả vào Canvas">
-          <svg width="10" height="14" viewBox="0 0 10 14" fill="none">
-            <circle cx="3" cy="3" r="1.2" fill="currentColor" />
-            <circle cx="7" cy="3" r="1.2" fill="currentColor" />
-            <circle cx="3" cy="7" r="1.2" fill="currentColor" />
-            <circle cx="7" cy="7" r="1.2" fill="currentColor" />
-            <circle cx="3" cy="11" r="1.2" fill="currentColor" />
-            <circle cx="7" cy="11" r="1.2" fill="currentColor" />
-          </svg>
+      <!-- SECTION 1: FUNCTIONAL NODES -->
+      <div class="palette-section">
+        <div v-if="!isCollapsed" class="section-divider">
+          <span class="section-title-text">TÁC VỤ CHỨC NĂNG</span>
+          <span class="section-badge">{{ functionalNodes.length }}</span>
         </div>
 
-        <!-- Node Icon Box -->
-        <div class="node-icon-box">
-          <span class="node-icon-symbol">{{ item.icon }}</span>
+        <div class="palette-group">
+          <div
+            v-for="item in functionalNodes"
+            :key="item.type"
+            class="palette-node-item"
+            :style="{ '--palette-color': item.color, '--palette-bg': item.bg }"
+            draggable="true"
+            :title="`${item.title} (${item.label.toUpperCase()}) - Bấm hoặc kéo thả vào Canvas`"
+            @click="handleAddNode(item.type)"
+            @dragstart="handleDragStart($event, item.type)"
+          >
+            <!-- Drag Grip Handle -->
+            <div v-if="!isCollapsed" class="node-grip-handle" title="Kéo thả vào Canvas">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="none">
+                <circle cx="3" cy="3" r="1.2" fill="currentColor" />
+                <circle cx="7" cy="3" r="1.2" fill="currentColor" />
+                <circle cx="3" cy="7" r="1.2" fill="currentColor" />
+                <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+                <circle cx="3" cy="11" r="1.2" fill="currentColor" />
+                <circle cx="7" cy="11" r="1.2" fill="currentColor" />
+              </svg>
+            </div>
+
+            <!-- Node Icon Box -->
+            <div class="node-icon-box">
+              <span class="node-icon-symbol">{{ item.icon }}</span>
+            </div>
+
+            <!-- Node Label -->
+            <span v-if="!isCollapsed" class="node-label">{{ item.label.toUpperCase() }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- COLLAPSED MODE DIVIDER -->
+      <div v-if="isCollapsed" class="collapsed-divider"></div>
+
+      <!-- SECTION 2: BRANCHING & ROUTING NODES -->
+      <div class="palette-section">
+        <div v-if="!isCollapsed" class="section-divider">
+          <span class="section-title-text">RẼ NHÁNH & ĐIỀU HƯỚNG</span>
+          <span class="section-badge branch-badge">{{ branchingNodes.length }}</span>
         </div>
 
-        <!-- Node Label (Uppercase like APPROVAL) -->
-        <span v-if="!isCollapsed" class="node-label">{{ item.label.toUpperCase() }}</span>
+        <div class="palette-group">
+          <div
+            v-for="item in branchingNodes"
+            :key="item.type"
+            class="palette-node-item"
+            :style="{ '--palette-color': item.color, '--palette-bg': item.bg }"
+            draggable="true"
+            :title="`${item.title} (${item.label.toUpperCase()}) - Bấm hoặc kéo thả vào Canvas`"
+            @click="handleAddNode(item.type)"
+            @dragstart="handleDragStart($event, item.type)"
+          >
+            <!-- Drag Grip Handle -->
+            <div v-if="!isCollapsed" class="node-grip-handle" title="Kéo thả vào Canvas">
+              <svg width="10" height="14" viewBox="0 0 10 14" fill="none">
+                <circle cx="3" cy="3" r="1.2" fill="currentColor" />
+                <circle cx="7" cy="3" r="1.2" fill="currentColor" />
+                <circle cx="3" cy="7" r="1.2" fill="currentColor" />
+                <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+                <circle cx="3" cy="11" r="1.2" fill="currentColor" />
+                <circle cx="7" cy="11" r="1.2" fill="currentColor" />
+              </svg>
+            </div>
+
+            <!-- Node Icon Box -->
+            <div class="node-icon-box">
+              <span class="node-icon-symbol">{{ item.icon }}</span>
+            </div>
+
+            <!-- Node Label -->
+            <span v-if="!isCollapsed" class="node-label">{{ item.label.toUpperCase() }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </aside>
@@ -177,7 +240,7 @@ const handleAddNode = (type: EditorNodeType) => {
 }
 
 /* ==========================================================
-   NODE LIST
+   NODE LIST & SECTIONS
    ========================================================== */
 .sidebar-node-list {
   flex: 1;
@@ -185,11 +248,65 @@ const handleAddNode = (type: EditorNodeType) => {
   padding: 0.75rem 0.625rem;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 1rem;
 }
 
 .is-collapsed .sidebar-node-list {
   padding: 0.75rem 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.palette-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.section-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.25rem 0.25rem 0.25rem;
+  border-bottom: 1px dashed #e2e8f0;
+  margin-bottom: 0.15rem;
+}
+
+.section-title-text {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.06em;
+}
+
+.section-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.section-badge.branch-badge {
+  background: #fdf2f8;
+  color: #db2777;
+}
+
+.collapsed-divider {
+  width: 24px;
+  height: 1px;
+  background: #cbd5e1;
+  margin: 0.25rem 0;
+}
+
+.palette-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.is-collapsed .palette-group {
   align-items: center;
 }
 

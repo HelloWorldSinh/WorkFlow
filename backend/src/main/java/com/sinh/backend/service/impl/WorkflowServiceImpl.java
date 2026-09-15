@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -332,17 +333,58 @@ public class WorkflowServiceImpl implements WorkflowService {
             }
         }
 
-        // 4. Lưu danh sách Transitions (Đường nối)
+        // 4. Kiểm tra nguyên tắc luồng:
+        // - Tất cả các node (trừ CONDITION & PARALLEL) chỉ được có tối đa 1 luồng đầu ra
+        // - Tất cả các node chỉ được phép có tối đa 1 nhánh mặc định (ELSE / Fallback)
+        if (request.getEdges() != null && request.getNodes() != null) {
+            Map<String, Long> outgoingCounts = request.getEdges().stream()
+                    .filter(e -> e.getFromNodeId() != null)
+                    .collect(Collectors.groupingBy(SaveWorkflowGraphRequest.EdgeDTO::getFromNodeId, Collectors.counting()));
+
+            Map<String, Long> elseOutgoingCounts = request.getEdges().stream()
+                    .filter(e -> e.getFromNodeId() != null)
+                    .filter(e -> "else".equalsIgnoreCase(e.getBranchType()) || "ELSE".equalsIgnoreCase(e.getLabel()))
+                    .collect(Collectors.groupingBy(SaveWorkflowGraphRequest.EdgeDTO::getFromNodeId, Collectors.counting()));
+
+            for (SaveWorkflowGraphRequest.NodeDTO nodeDTO : request.getNodes()) {
+                NodeType type = parseNodeType(nodeDTO.getType());
+                if (type != NodeType.Condition && type != NodeType.Parallel && type != NodeType.End) {
+                    long count = outgoingCounts.getOrDefault(nodeDTO.getId(), 0L);
+                    if (count > 1) {
+                        throw new IllegalArgumentException("Bước '" + (nodeDTO.getName() != null ? nodeDTO.getName() : nodeDTO.getId())
+                                + "' chỉ được phép có 1 luồng đầu ra. Hãy dùng bước Rẽ Nhánh (Condition/Parallel) nếu muốn rẽ luồng.");
+                    }
+                }
+
+                long elseCount = elseOutgoingCounts.getOrDefault(nodeDTO.getId(), 0L);
+                if (elseCount > 1) {
+                    throw new IllegalArgumentException("Bước '" + (nodeDTO.getName() != null ? nodeDTO.getName() : nodeDTO.getId())
+                            + "' chỉ được phép có tối đa 1 nhánh mặc định (ELSE / Fallback).");
+                }
+            }
+        }
+
+        // 5. Lưu danh sách Transitions (Đường nối)
         if (request.getEdges() != null) {
             for (SaveWorkflowGraphRequest.EdgeDTO edgeDTO : request.getEdges()) {
                 Node sourceNode = createdNodeMap.get(edgeDTO.getFromNodeId());
                 Node targetNode = createdNodeMap.get(edgeDTO.getToNodeId());
 
                 if (sourceNode != null && targetNode != null) {
-                    // 1. Tự động sinh chuỗi biểu thức logic từ các rules nếu chưa có
+                    // 1. Re-validate & parse expression to nested JSON tree with DataType inference
                     String expression = edgeDTO.getConditionExpression();
                     if ((expression == null || expression.trim().isEmpty()) && edgeDTO.getConditions() != null) {
                         expression = generateConditionExpression(edgeDTO.getConditions());
+                    }
+
+                    Map<String, Object> conditionTree = Collections.emptyMap();
+                    if (expression != null && !expression.trim().isEmpty()) {
+                        try {
+                            conditionTree = com.sinh.backend.util.ConditionExpressionParser.parseToTree(expression);
+                        } catch (IllegalArgumentException e) {
+                            log.error("Cú pháp biểu thức không hợp lệ cho edge {}: {}", edgeDTO.getId(), e.getMessage());
+                            throw e;
+                        }
                     }
 
                     // 2. Nhãn hiển thị: ưu tiên nhãn người dùng nhập, nếu để trống thì lấy biểu thức điều kiện
@@ -351,35 +393,29 @@ public class WorkflowServiceImpl implements WorkflowService {
                         label = expression;
                     }
 
-                    // 3. Đóng gói payload JSON cấu hình điều kiện
-                    Map<String, Object> conditionMap = new HashMap<>();
-                    if (expression != null && !expression.trim().isEmpty()) {
-                        conditionMap.put("expression", expression);
-                    }
-                    if (edgeDTO.getMatchType() != null) {
-                        conditionMap.put("matchType", edgeDTO.getMatchType());
-                    } else if (edgeDTO.getConditions() != null) {
-                        conditionMap.put("matchType", "CUSTOM");
-                    } else {
-                        conditionMap.put("matchType", "ALWAYS");
-                    }
-
-                    if (edgeDTO.getConditions() != null) {
-                        conditionMap.put("rules", edgeDTO.getConditions());
-                        conditionMap.put("conditions", edgeDTO.getConditions());
-                    }
-                    if (edgeDTO.getId() != null) {
-                        conditionMap.put("clientEdgeId", edgeDTO.getId());
-                    }
-                    if (edgeDTO.getBranchType() != null) {
-                        conditionMap.put("branchType", edgeDTO.getBranchType());
-                    }
-
+                    // 3. Đóng gói payload JSON cấu hình điều kiện tinh gọn (không lặp lại các trường rác)
                     String conditionJson = null;
-                    try {
-                        conditionJson = objectMapper.writeValueAsString(conditionMap);
-                    } catch (Exception e) {
-                        log.error("Lỗi parse condition JSON edge {}: {}", edgeDTO.getId(), e.getMessage());
+                    boolean isElse = "else".equalsIgnoreCase(edgeDTO.getBranchType());
+
+                    if (isElse) {
+                        Map<String, Object> conditionMap = new LinkedHashMap<>();
+                        conditionMap.put("isElse", true);
+                        conditionMap.put("priority", edgeDTO.getPriority() != null ? edgeDTO.getPriority() : 999);
+                        try {
+                            conditionJson = objectMapper.writeValueAsString(conditionMap);
+                        } catch (Exception e) {
+                            log.error("Lỗi serialize condition JSON edge {}: {}", edgeDTO.getId(), e.getMessage());
+                        }
+                    } else if (expression != null && !expression.trim().isEmpty()) {
+                        Map<String, Object> conditionMap = new LinkedHashMap<>();
+                        conditionMap.put("expression", expression);
+                        conditionMap.put("conditionTree", conditionTree);
+                        conditionMap.put("priority", edgeDTO.getPriority() != null ? edgeDTO.getPriority() : 1);
+                        try {
+                            conditionJson = objectMapper.writeValueAsString(conditionMap);
+                        } catch (Exception e) {
+                            log.error("Lỗi serialize condition JSON edge {}: {}", edgeDTO.getId(), e.getMessage());
+                        }
                     }
 
                     // 4. Lưu Transition xuống database (cột label và cột conditions)
@@ -533,6 +569,9 @@ public class WorkflowServiceImpl implements WorkflowService {
             case "assignment" -> NodeType.Assignment;
             case "notification" -> NodeType.Notification;
             case "systemaction", "system_action" -> NodeType.SystemAction;
+            case "condition" -> NodeType.Condition;
+            case "parallel" -> NodeType.Parallel;
+            case "join" -> NodeType.Join;
             case "end" -> NodeType.End;
             default -> NodeType.Start;
         };
@@ -548,6 +587,9 @@ public class WorkflowServiceImpl implements WorkflowService {
             case Assignment -> "assignment";
             case Notification -> "notification";
             case SystemAction -> "system_action";
+            case Condition -> "condition";
+            case Parallel -> "parallel";
+            case Join -> "join";
             case End -> "end";
         };
     }
