@@ -8,8 +8,5 @@ public enum NodeType {
     Assignment,
     Notification,
     SystemAction,
-    Condition,
-    Parallel,
-    Join,
     End
 }
